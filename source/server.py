@@ -1,6 +1,4 @@
 import tensorflow as tf
-from tensorflow.python.keras.engine.input_layer import InputLayer
-from utils import get_posterior_from_layer, clone, sparse_array, get_refined_prior, gaussian_ratio_par
 import tensorflow_probability as tfp
 
 

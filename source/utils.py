@@ -29,9 +29,9 @@ def permuted_mnist(x_train, x_test):
         return x
 
     indx = np.random.permutation(x_train[0].size)
-    x_train = shuffle(x_train,indx)
-    x_test = shuffle(x_test,indx)
-    return x_train,x_test
+    x_train = shuffle(x_train, indx)
+    x_test = shuffle(x_test, indx)
+    return x_train, x_test
 
 
 def build_input_pipeline(x, y, batch_size, iterator=False):
@@ -155,7 +155,7 @@ def clone(layer, **kwargs):
         return layer.__class__.from_config(config)
 
 
-def sparse_array(position,size):
+def sparse_array(position, size):
     array = [0]*size
     array[position] = 1
     return array

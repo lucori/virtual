@@ -7,7 +7,7 @@ from server import Server
 layer = tfp.layers.DenseReparameterization
 x_train,y_train,x_test,y_test = mnist_data()
 
-NUM_GPUS = 0
+NUM_GPUS = 1
 
 config = gpu_session(NUM_GPUS)
 if config:

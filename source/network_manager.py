@@ -61,7 +61,7 @@ class NetworkManager:
         x = input_tensor
         server.client_count += 1
         name = '_client_' + str(server.client_count)
-        for layer in server._layers:
+        for layer in server.layers:
             if not isinstance(layer, InputLayer):
                 if 'lateral' in layer.name:
                     out1 = clone(layer, activation='linear', name=name + '_from_client')(x)
