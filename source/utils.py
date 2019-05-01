@@ -130,7 +130,7 @@ def get_posterior_from_layer(l):
         return []
 
 
-def clone(layer, **kwargs):
+def clone(layer, data_set_size=None, n_samples=None, **kwargs):
     config = layer.get_config()
     for key, value in kwargs.items():
         if key == 'name':
@@ -149,7 +149,7 @@ def clone(layer, **kwargs):
                 args[key] = kwargs[key]
             else:
                 args[key] = sub_config[key]
-        args['kernel_divergence_fn'] = lambda q, p, _: tfp.distributions.kl_divergence(q, p)/60000
+        args['kernel_divergence_fn'] = lambda q, p, _: tfp.distributions.kl_divergence(q, p)/(data_set_size*n_samples)
         return layer.__class__(**args)
     else:
         return layer.__class__.from_config(config)
@@ -159,3 +159,19 @@ def sparse_array(position, size):
     array = [0]*size
     array[position] = 1
     return array
+
+
+def permuted_mnist_for_n_tasks(num_tasks):
+    x_train, y_train, x_test, y_test = mnist_data()
+    x = []
+    x_t = []
+    y = []
+    y_t = []
+    for _ in range(num_tasks):
+        x_train_perm, x_test_perm = permuted_mnist(x_train, x_test)
+        x.append(x_train_perm)
+        x_t.append(x_test_perm)
+        y.append(y_train)
+        y_t.append(y_test)
+
+    return x, y, x_t, y_t

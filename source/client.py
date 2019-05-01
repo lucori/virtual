@@ -7,13 +7,15 @@ import tensorflow_probability as tfp
 from server import Server
 
 
-class Client(tf.keras.Model):
+class _Client(tf.keras.Model):
 
     def __init__(self, *args, **kwargs):
-        super(Client, self).__init__(*args, **kwargs)
+        super(_Client, self).__init__(*args, **kwargs)
         self.prior_fn_client = lambda layer: tfp.layers.default_multivariate_normal_fn
         self.prior_fn_server = get_refined_prior
         self.old_server_par = {}
+        self.data_set_size = None
+        self.n_samples = None
 
     def new_server_and_client(self, server, client_refining=False, data_set=None):
         if client_refining:
@@ -43,16 +45,17 @@ class Client(tf.keras.Model):
                 if layer not in layer_map:
                     # Clone layer.
                     if not issubclass(layer.__class__, DenseReparameterization):
-                        new_layer = clone(layer)
+                        new_layer = clone(layer, data_set_size=self.data_set_size, n_samples=self.n_samples)
                     elif '_client_' not in layer.name:
                         old_weights = None
                         if client_refining:
                             if self.old_server_par[data_set]:
                                 old_weights = self.old_server_par[data_set][layer.name]
-                        new_layer = clone(layer,
+                        new_layer = clone(layer, data_set_size=self.data_set_size, n_samples=self.n_samples,
                                 kernel_prior_fn=self.prior_fn_server(server.get_layer(layer.name), old_weights))
                     else:
-                        new_layer = clone(layer, kernel_prior_fn=self.prior_fn_client(layer))
+                        new_layer = clone(layer, data_set_size=self.data_set_size, n_samples=self.n_samples,
+                                          kernel_prior_fn=self.prior_fn_client(layer))
 
                     layer_map[layer] = new_layer
                     layer = new_layer
@@ -97,14 +100,63 @@ class Client(tf.keras.Model):
             assert x in tensor_map, 'Could not compute output ' + str(x)
             output_tensors.append(tensor_map[x])
 
-        client = Client(input_tensors, output_tensors, name=self.name)
+        weights = self.get_weights()
+        name = self.name
+        old_server_par = self.old_server_par
+        data_set_size = self.data_set_size
+        n_samples = self.n_samples
+        del self, server
+
+        client = _Client(input_tensors, output_tensors, name=name)
         server_layers = []
         for layer in client.layers:
             if '_client_' not in layer.name:
                 server_layers.append(layer)
 
         server = Server(server_layers)
-        client.set_weights(self.get_weights())
+        client.set_weights(weights)
         client.prior_fn_client = get_posterior_from_layer
-        client.old_server_par = self.old_server_par
+        client.old_server_par = old_server_par
+        client.data_set_size = data_set_size
+        client.n_samples = n_samples
         return server, client
+
+
+class Client(tf.keras.Model):
+
+    def __init__(self, *args, **kwargs):
+        super(Client, self).__init__()
+        n_samples = kwargs.pop('n_samples', None)
+        print(n_samples)
+        model = kwargs.pop('model', None)
+        if n_samples:
+            self.n_samples = n_samples
+        else:
+            self.n_samples = 10
+        if model:
+            self.model = model
+        else:
+            self.model = _Client(*args, **kwargs)
+        self.model.n_samples = self.n_samples
+
+
+    def call(self, inputs):
+        output = []
+        for _ in range(self.n_samples):
+            output.append(self.model.call(inputs))
+
+        output = tf.keras.layers.Lambda(lambda q: tf.stack(q))(output)
+        output = tf.keras.layers.Lambda(lambda q: tf.reduce_sum(q, axis=0))(output)
+        return output
+
+    def new_server_and_client(self, server, client_refining=False, data_set=None):
+        server, client = self.model.new_server_and_client(server, client_refining, data_set)
+        return server, Client(model=client, n_samples=self.n_samples)
+
+    @property
+    def data_set_size(self):
+        return self.model.data_set_size
+
+    @data_set_size.setter
+    def data_set_size(self, a):
+        self.model.data_set_size = a

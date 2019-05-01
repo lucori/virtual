@@ -6,11 +6,13 @@ from client import Client
 
 class NetworkManager:
 
-    def __init__(self, server):
+    def __init__(self, server, data_set_size=None, n_samples=10):
         self.server = server
         self.clients = []
         self.optimizer = None
         self.compile_conf = {}
+        self.data_set_size = data_set_size
+        self.n_samples = n_samples
 
     def compile(self, optimizer, **kwargs):
         self.optimizer = dict(tf.keras.optimizers.serialize(optimizer))
@@ -25,6 +27,7 @@ class NetworkManager:
         optimizer = tf.keras.optimizers.deserialize(dict(self.optimizer))
         sequence = list(zip(model_sequence, data_sequence))
         refined = list(set([x for x in sequence if sequence.count(x) >= 2]))
+        history = []
         for (i, j) in sequence:
             self.server, self.clients[i] = self.clients[i].new_server_and_client(self.server,
                                                                                  client_refining=((i, j) in refined),
@@ -36,7 +39,7 @@ class NetworkManager:
             if validation_data:
                 fit_config['validation_data'] = validation_data[j]
             fit_config.update(kwargs)
-            self.clients[i].fit(**fit_config)
+            history.append(self.clients[i].fit(**fit_config))
             if (i, j) in refined:
                 if self.clients[i].old_server_par[j]:
                     for layer in self.clients[i].old_server_par[j]:
@@ -45,13 +48,12 @@ class NetworkManager:
                                                 self.clients[i].old_server_par[j][layer])
                 else:
                     self.clients[i].old_server_par[j] = self.server.get_dict_weights()
+        return history
 
     def create_clients(self, num_clients):
-        outputs = []
         clients = []
         for _ in range(num_clients):
             client = self.client_from_server(self.server)
-            outputs.append(client.output)
             clients.append(client)
         self.clients = clients
         return clients
@@ -64,12 +66,15 @@ class NetworkManager:
         for layer in server.layers:
             if not isinstance(layer, InputLayer):
                 if 'lateral' in layer.name:
-                    out1 = clone(layer, activation='linear', name=name + '_from_client')(x)
-                    out2 = clone(layer, activation='linear', name=name + '_from_server')(layer.output)
+                    out1 = clone(layer, data_set_size=self.data_set_size, n_samples=self.n_samples,
+                                 activation='linear', name=name + '_from_client')(x)
+                    out2 = clone(layer, data_set_size=self.data_set_size, n_samples=self.n_samples,
+                                 activation='linear', name=name + '_from_server')(layer.output)
                     x = tf.keras.layers.add([out1, out2], name=layer.name + '_add' + name)
                     x = tf.keras.layers.Activation(layer.get_config()['activation'],
                                                    name=layer.name + '_activation' + name)(x)
                 else:
-                    x = clone(layer, name=name)(x)
-
-        return Client(input_tensor, x)
+                    x = clone(layer, data_set_size=self.data_set_size, n_samples=self.n_samples, name=name)(x)
+        client = Client(input_tensor, x, n_samples=self.n_samples)
+        client.data_set_size = self.data_set_size
+        return client
