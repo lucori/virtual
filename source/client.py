@@ -157,6 +157,10 @@ class Client(tf.keras.Model):
     def data_set_size(self):
         return self.model.data_set_size
 
+    @property
+    def old_server_par(self):
+        return self.model.old_server_par
+
     @data_set_size.setter
     def data_set_size(self, a):
         self.model.data_set_size = a
