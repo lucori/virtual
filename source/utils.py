@@ -6,6 +6,46 @@ import GPUtil
 from tensorflow_probability.python import  distributions as tfd
 from tensorflow_probability.python.layers import DenseReparameterization
 from server import Server
+from tensorflow.python.framework import tensor_shape
+from tensorflow.python.keras import initializers
+
+
+class Gate(tf.keras.layers.Layer):
+
+    def __init__(self,
+                 initializer=tf.keras.initializers.RandomUniform(minval=0,
+                                                                 maxval=0.01),
+                 **kwargs):
+        if 'input_shape' not in kwargs and 'input_dim' in kwargs:
+            kwargs['input_shape'] = (kwargs.pop('input_dim'),)
+
+        super(Gate, self).__init__(**kwargs)
+        self.initializer = initializers.get(initializer)
+
+    def build(self, input_shape):
+        input_shape = tensor_shape.TensorShape(input_shape)
+        self.gate = self.add_weight(
+            'gate',
+            shape=input_shape[1:],
+            initializer=self.initializer,
+            dtype=self.dtype,
+            trainable=True)
+        self.built = True
+
+    def call(self, inputs):
+        outputs = tf.math.multiply(inputs, self.gate)
+        return outputs
+
+    def compute_output_shape(self, input_shape):
+        return input_shape
+
+    def get_config(self):
+        config = {
+            'initializer': initializers.serialize(self.initializer),
+            }
+        base_config = super(Gate, self).get_config()
+        return dict(list(base_config.items()) + list(config.items()))
+
 
 def mnist_data():
     (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
@@ -123,7 +163,6 @@ def gaussian_ratio_par(v1, v2):
 def get_refined_prior(l1, w2):
     w1 = l1.get_weights()
     if w2:
-        print('refining')
         return compute_gaussian_ratio(w1[0], w1[1], w2[0], w2[1])
     else:
         return get_posterior_from_layer(l1)
@@ -248,3 +287,18 @@ def femnist_data(num_tasks, global_data=False, train_set_size_per_user=-1, test_
 
     return x, y, xt, yt
 
+
+class DenseReparameterizationPriorUpdate(tfp.layers.DenseReparameterization):
+
+    def update_prior(self, kernel_prior_fn):
+        input_shape = self.input_shape
+        in_size = input_shape[-1]
+        dtype = tf.as_dtype(self.dtype or tf.keras.backend.floatx())
+        self.kernel_prior = kernel_prior_fn(dtype, [in_size, self.units], 'kernel_prior',
+                                            self.trainable, self.add_variable)
+        self._losses = []
+        self._apply_divergence(self.kernel_divergence_fn,
+                               self.kernel_posterior,
+                               self.kernel_prior,
+                               self.kernel_posterior_tensor,
+                               name='divergence_kernel')

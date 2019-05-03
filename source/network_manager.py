@@ -1,8 +1,9 @@
 import tensorflow as tf
-from utils import get_posterior_from_layer, clone, sparse_array, get_refined_prior, gaussian_ratio_par
+from utils import get_posterior_from_layer, clone, sparse_array, get_refined_prior, gaussian_ratio_par, Gate
 from tensorflow.python.keras.engine.input_layer import InputLayer
 from client import Client
 from collections import defaultdict
+
 
 class NetworkManager:
 
@@ -34,9 +35,7 @@ class NetworkManager:
         evaluate = defaultdict(list)
         for t, (i, j) in enumerate(sequence):
             print('step ', t, ' in sequence of lenght ', len(sequence), ' task ', i)
-            self.server, self.clients[i] = self.clients[i].new_server_and_client(self.server,
-                                                                                 client_refining=((i, j) in refined),
-                                                                                 data_set=j)
+            self.clients[i].update_prior(client_refining=((i, j) in refined), data_set=j)
             self.clients[i].compile(optimizer, **self.compile_conf)
             fit_config = {'x': x[j]}
             if y:
@@ -79,7 +78,8 @@ class NetworkManager:
                     out1 = clone(layer, data_set_size=self.data_set_size, n_samples=self.n_samples,
                                  activation='linear', name=name + '_from_client')(x)
                     out2 = clone(layer, data_set_size=self.data_set_size, n_samples=self.n_samples,
-                                 activation='linear', name=name + '_from_server')(layer.output)
+                                 name=name + '_from_server')(layer.output)
+                    out2 = Gate()(out2)
                     x = tf.keras.layers.add([out1, out2], name=layer.name + '_add' + name)
                     x = tf.keras.layers.Activation(layer.get_config()['activation'],
                                                    name=layer.name + '_activation' + name)(x)
