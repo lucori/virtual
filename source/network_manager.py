@@ -2,7 +2,7 @@ import tensorflow as tf
 from utils import get_posterior_from_layer, clone, sparse_array, get_refined_prior, gaussian_ratio_par
 from tensorflow.python.keras.engine.input_layer import InputLayer
 from client import Client
-
+from collections import defaultdict
 
 class NetworkManager:
 
@@ -22,13 +22,18 @@ class NetworkManager:
         x = kwargs.pop('x')
         y = kwargs.pop('y', None)
         validation_data = kwargs.pop('validation_data', None)
+        test_data = kwargs.pop('test_data', None)
         if validation_data:
             validation_data = list(validation_data)
+        if test_data:
+            test_data = list(test_data)
         optimizer = tf.keras.optimizers.deserialize(dict(self.optimizer))
         sequence = list(zip(model_sequence, data_sequence))
         refined = list(set([x for x in sequence if sequence.count(x) >= 2]))
-        history = []
-        for (i, j) in sequence:
+        history = defaultdict(list)
+        evaluate = defaultdict(list)
+        for t, (i, j) in enumerate(sequence):
+            print('step ', t, ' in sequence of lenght ', len(sequence), ' task ', i)
             self.server, self.clients[i] = self.clients[i].new_server_and_client(self.server,
                                                                                  client_refining=((i, j) in refined),
                                                                                  data_set=j)
@@ -39,7 +44,12 @@ class NetworkManager:
             if validation_data:
                 fit_config['validation_data'] = validation_data[j]
             fit_config.update(kwargs)
-            history.append(self.clients[i].fit(**fit_config))
+            hist = self.clients[i].fit(**fit_config)
+            history[i].append(hist.history)
+            if test_data:
+                eval = self.clients[i].evaluate(*test_data[j])
+                evaluate[i].append(eval)
+                print(eval)
             if (i, j) in refined:
                 if self.clients[i].old_server_par[j]:
                     for layer in self.clients[i].old_server_par[j]:
@@ -48,7 +58,7 @@ class NetworkManager:
                                                 self.clients[i].old_server_par[j][layer])
                 else:
                     self.clients[i].old_server_par[j] = self.server.get_dict_weights()
-        return history
+        return history, evaluate
 
     def create_clients(self, num_clients):
         clients = []

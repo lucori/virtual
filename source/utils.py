@@ -5,7 +5,7 @@ import numpy as np
 import GPUtil
 from tensorflow_probability.python import  distributions as tfd
 from tensorflow_probability.python.layers import DenseReparameterization
-
+from server import Server
 
 def mnist_data():
     (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
@@ -46,11 +46,16 @@ def build_input_pipeline(x, y, batch_size, iterator=False):
         return images, labels, training_iterator
 
 
-def gpu_session(num_gpus):
-    if num_gpus > 0:
-        os.environ["CUDA_DEVICE_ORDER"]='PCI_BUS_ID'
-        os.environ["CUDA_VISIBLE_DEVICES"] = set_free_gpus(num_gpus)
-        print(os.environ["CUDA_VISIBLE_DEVICES"])
+def gpu_session(num_gpus=None, gpus=None):
+    if gpus:
+        os.environ["CUDA_VISIBLE_DEVICES"] = gpus
+    if num_gpus:
+        if num_gpus >0:
+            os.environ["CUDA_DEVICE_ORDER"]='PCI_BUS_ID'
+            os.environ["CUDA_VISIBLE_DEVICES"] = set_free_gpus(num_gpus)
+    num_gpus = len(os.environ["CUDA_VISIBLE_DEVICES"])
+    print(os.environ["CUDA_VISIBLE_DEVICES"])
+    if gpus or num_gpus>0:
         distribution = tf.contrib.distribute.MirroredStrategy(num_gpus=num_gpus)
         config = tf.ConfigProto(allow_soft_placement=True)
         config.gpu_options.allow_growth = True
@@ -118,6 +123,7 @@ def gaussian_ratio_par(v1, v2):
 def get_refined_prior(l1, w2):
     w1 = l1.get_weights()
     if w2:
+        print('refining')
         return compute_gaussian_ratio(w1[0], w1[1], w2[0], w2[1])
     else:
         return get_posterior_from_layer(l1)
@@ -175,3 +181,70 @@ def permuted_mnist_for_n_tasks(num_tasks):
         y_t.append(y_test)
 
     return x, y, x_t, y_t
+
+
+def get_mlp_server(input_shape, layer, layer_units, activations, data_set_size, num_samples):
+    server = Server()
+    server.add(tf.keras.layers.InputLayer(input_shape=input_shape))
+    server.add(tf.keras.layers.Flatten())
+    for i, (u, act) in enumerate(zip(layer_units, activations)):
+        server.add(layer(u, activation=act, name='lateral' + str(i),
+              kernel_divergence_fn=
+              lambda q, p, _: tfp.distributions.kl_divergence(q, p)/(data_set_size*num_samples)))
+    return server
+
+
+def femnist_data(num_tasks, global_data=False, train_set_size_per_user=-1, test_set_size_per_user=-1):
+    import os
+    import json
+    data = []
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+    dir_path = os.path.dirname(dir_path)
+    dir_path_train = os.path.join(dir_path, 'leaf/data/femnist/data/train')
+    dir_path_test = os.path.join(dir_path, 'leaf/data/femnist/data/test')
+
+    for file_name in os.listdir(dir_path_train):
+        file = os.path.join(dir_path_train, file_name)
+        file = open(file)
+        data.append(json.load(file))
+        file.close()
+    data_merge_train = {'users': [], 'num_samples': [], 'user_data': {}}
+    for d in data:
+        data_merge_train['users'] = data_merge_train['users'] + d['users']
+        data_merge_train['num_samples']= data_merge_train['num_samples'] + d['num_samples']
+        data_merge_train['user_data'].update(d['user_data'])
+
+    data = []
+    for file_name in os.listdir(dir_path_test):
+        file = os.path.join(dir_path_test, file_name)
+        file = open(file)
+        data.append(json.load(file))
+        file.close()
+    data_merge_test = {'users': [], 'num_samples': [], 'user_data': {}}
+    for d in data:
+        data_merge_test['users'] = data_merge_test['users'] + d['users']
+        data_merge_test['num_samples'] = data_merge_test['num_samples'] + d['num_samples']
+        data_merge_test['user_data'].update(d['user_data'])
+
+    x = []
+    y = []
+    xt = []
+    yt = []
+
+    users = [u for u, n in zip(data_merge_train['users'], data_merge_train['num_samples']) if n >= train_set_size_per_user]
+    users = users[0:num_tasks]
+    for user in users:
+        x.append(np.array(data_merge_train['user_data'][user]['x'])[0:train_set_size_per_user])
+        y.append(tf.keras.utils.to_categorical(np.array(data_merge_train['user_data'][user]['y']),
+                                               num_classes=62)[0:train_set_size_per_user])
+        xt.append(np.array(data_merge_test['user_data'][user]['x'])[0:test_set_size_per_user])
+        yt.append(tf.keras.utils.to_categorical(np.array(data_merge_test['user_data'][user]['y']),
+                                                num_classes=62)[0:test_set_size_per_user])
+    if global_data:
+        x = np.concatenate(x)
+        y = np.concatenate(y)
+        xt = np.concatenate(xt)
+        yt = np.concatenate(yt)
+
+    return x, y, xt, yt
+

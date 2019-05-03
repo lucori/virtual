@@ -127,7 +127,6 @@ class Client(tf.keras.Model):
     def __init__(self, *args, **kwargs):
         super(Client, self).__init__()
         n_samples = kwargs.pop('n_samples', None)
-        print(n_samples)
         model = kwargs.pop('model', None)
         if n_samples:
             self.n_samples = n_samples
