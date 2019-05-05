@@ -1,0 +1,29 @@
+{
+    "session":{
+        "num_gpus": 1,
+        "gpus": null,
+        "experiment_name": "federated_exp_femnist"
+    },
+    "data_set":{
+        "num_tasks": 20,
+        "data_set_size_per_user": 250,
+        "test_set_size_per_user": -1,
+        "generator": "femnist"
+    },
+    "training":{
+      "num_epochs": 10000,
+      "batch_size": 32,
+      "num_refining": 2,
+      "patience": 10,
+      "learning_rate": 0.001,
+      "validation_split": 0.2,
+      "verbose": 1
+    },
+    "model":{
+      "num_samples": 10,
+      "input_shape": [784],
+      "layer": "DenseReparameterizationPriorUpdate",
+      "layer_units": [100, 100, 62],
+      "activations": ["relu", "relu", "softmax"]
+    }
+}

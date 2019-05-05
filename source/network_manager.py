@@ -1,5 +1,5 @@
 import tensorflow as tf
-from utils import get_posterior_from_layer, clone, sparse_array, get_refined_prior, gaussian_ratio_par, Gate
+from utils import get_posterior_from_layer, clone, get_refined_prior, gaussian_ratio_par, Gate
 from tensorflow.python.keras.engine.input_layer import InputLayer
 from client import Client
 from collections import defaultdict
@@ -78,7 +78,9 @@ class NetworkManager:
                     out1 = clone(layer, data_set_size=self.data_set_size, n_samples=self.n_samples,
                                  activation='linear', name=name + '_from_client')(x)
                     out2 = clone(layer, data_set_size=self.data_set_size, n_samples=self.n_samples,
-                                 name=name + '_from_server')(layer.output)
+                                 name=name + '_from_server1')(layer.output)
+                    out2 = clone(layer, data_set_size=self.data_set_size, n_samples=self.n_samples,
+                                 activation='linear', name=name + '_from_server2')(out2)
                     out2 = Gate()(out2)
                     x = tf.keras.layers.add([out1, out2], name=layer.name + '_add' + name)
                     x = tf.keras.layers.Activation(layer.get_config()['activation'],
@@ -88,3 +90,7 @@ class NetworkManager:
         client = Client(input_tensor, x, n_samples=self.n_samples)
         client.data_set_size = self.data_set_size
         return client
+
+    def summary(self):
+        for c in self.clients:
+            c.summary()

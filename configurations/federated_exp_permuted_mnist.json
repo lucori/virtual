@@ -1,0 +1,29 @@
+{
+    "session":{
+        "num_gpus": 1,
+        "gpus": null,
+        "experiment_name": "federated_exp_permuted_mnist"
+    },
+    "data_set":{
+        "num_tasks": 10,
+        "data_set_size_per_user": 6000,
+        "test_set_size_per_user": 10000,
+        "generator": "permuted_mnist"
+    },
+    "training":{
+      "num_epochs": 10000,
+      "batch_size": 32,
+      "num_refining": 5,
+      "patience": 10,
+      "learning_rate": 0.001,
+      "validation_split": 0.2,
+      "verbose": 1
+    },
+    "model":{
+      "num_samples": 10,
+      "input_shape": [28,28,1],
+      "layer": "DenseReparameterizationPriorUpdate",
+      "layer_units": [100, 100, 10],
+      "activations": ["relu", "relu", "softmax"]
+    }
+}

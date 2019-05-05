@@ -14,7 +14,7 @@ class Gate(tf.keras.layers.Layer):
 
     def __init__(self,
                  initializer=tf.keras.initializers.RandomUniform(minval=0,
-                                                                 maxval=0.01),
+                                                                 maxval=0.1),
                  **kwargs):
         if 'input_shape' not in kwargs and 'input_dim' in kwargs:
             kwargs['input_shape'] = (kwargs.pop('input_dim'),)
@@ -47,43 +47,20 @@ class Gate(tf.keras.layers.Layer):
         return dict(list(base_config.items()) + list(config.items()))
 
 
-def mnist_data():
-    (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
-    x_train = x_train.astype('float32')
-    x_test = x_test.astype('float32')
-    y_train = tf.keras.utils.to_categorical(y_train.astype('int32'))
-    y_test = tf.keras.utils.to_categorical(y_test.astype('int32'))
-    x_train = x_train.reshape(60000, 28, 28, 1)
-    x_test = x_test.reshape(10000, 28, 28, 1)
-    x_train /= 126
-    x_test /= 126
-    return x_train, y_train, x_test, y_test
+class DenseReparameterizationPriorUpdate(tfp.layers.DenseReparameterization):
 
-
-def permuted_mnist(x_train, x_test):
-
-    def shuffle(x, indx):
-        shape = x[0].shape
-        for i, _ in enumerate(x):
-            x[i] = (x[i].flatten()[indx]).reshape(shape)
-        return x
-
-    indx = np.random.permutation(x_train[0].size)
-    x_train = shuffle(x_train, indx)
-    x_test = shuffle(x_test, indx)
-    return x_train, x_test
-
-
-def build_input_pipeline(x, y, batch_size, iterator=False):
-    training_dataset = tf.data.Dataset.from_tensor_slices((x, y))
-    training_dataset = training_dataset.repeat().batch(batch_size)
-    if not iterator:
-        return training_dataset
-    else:
-        training_iterator = training_dataset.make_one_shot_iterator()
-        images, labels = training_iterator.get_next()
-
-        return images, labels, training_iterator
+    def update_prior(self, kernel_prior_fn):
+        input_shape = self.input_shape
+        in_size = input_shape[-1]
+        dtype = tf.as_dtype(self.dtype or tf.keras.backend.floatx())
+        self.kernel_prior = kernel_prior_fn(dtype, [in_size, self.units], 'kernel_prior',
+                                            self.trainable, self.add_variable)
+        self._losses = []
+        self._apply_divergence(self.kernel_divergence_fn,
+                               self.kernel_posterior,
+                               self.kernel_prior,
+                               self.kernel_posterior_tensor,
+                               name='divergence_kernel')
 
 
 def gpu_session(num_gpus=None, gpus=None):
@@ -200,28 +177,6 @@ def clone(layer, data_set_size=None, n_samples=None, **kwargs):
         return layer.__class__.from_config(config)
 
 
-def sparse_array(position, size):
-    array = [0]*size
-    array[position] = 1
-    return array
-
-
-def permuted_mnist_for_n_tasks(num_tasks):
-    x_train, y_train, x_test, y_test = mnist_data()
-    x = []
-    x_t = []
-    y = []
-    y_t = []
-    for _ in range(num_tasks):
-        x_train_perm, x_test_perm = permuted_mnist(x_train, x_test)
-        x.append(x_train_perm)
-        x_t.append(x_test_perm)
-        y.append(y_train)
-        y_t.append(y_test)
-
-    return x, y, x_t, y_t
-
-
 def get_mlp_server(input_shape, layer, layer_units, activations, data_set_size, num_samples):
     server = Server()
     server.add(tf.keras.layers.InputLayer(input_shape=input_shape))
@@ -233,72 +188,11 @@ def get_mlp_server(input_shape, layer, layer_units, activations, data_set_size, 
     return server
 
 
-def femnist_data(num_tasks, global_data=False, train_set_size_per_user=-1, test_set_size_per_user=-1):
-    import os
-    import json
-    data = []
-    dir_path = os.path.dirname(os.path.realpath(__file__))
-    dir_path = os.path.dirname(dir_path)
-    dir_path_train = os.path.join(dir_path, 'leaf/data/femnist/data/train')
-    dir_path_test = os.path.join(dir_path, 'leaf/data/femnist/data/test')
+def aulc(virtual_history, quantity='categorical_accuracy'):
+    history_first_pass = [v[0] for v in virtual_history.values()]
+    quantity_per_task = [h[quantity] for h in history_first_pass]
+    epochs = [len(q) for q in quantity_per_task]
+    min_epochs = min(epochs)
+    aulcs = [np.trapz(q[:min_epochs]) for q in quantity_per_task]
 
-    for file_name in os.listdir(dir_path_train):
-        file = os.path.join(dir_path_train, file_name)
-        file = open(file)
-        data.append(json.load(file))
-        file.close()
-    data_merge_train = {'users': [], 'num_samples': [], 'user_data': {}}
-    for d in data:
-        data_merge_train['users'] = data_merge_train['users'] + d['users']
-        data_merge_train['num_samples']= data_merge_train['num_samples'] + d['num_samples']
-        data_merge_train['user_data'].update(d['user_data'])
-
-    data = []
-    for file_name in os.listdir(dir_path_test):
-        file = os.path.join(dir_path_test, file_name)
-        file = open(file)
-        data.append(json.load(file))
-        file.close()
-    data_merge_test = {'users': [], 'num_samples': [], 'user_data': {}}
-    for d in data:
-        data_merge_test['users'] = data_merge_test['users'] + d['users']
-        data_merge_test['num_samples'] = data_merge_test['num_samples'] + d['num_samples']
-        data_merge_test['user_data'].update(d['user_data'])
-
-    x = []
-    y = []
-    xt = []
-    yt = []
-
-    users = [u for u, n in zip(data_merge_train['users'], data_merge_train['num_samples']) if n >= train_set_size_per_user]
-    users = users[0:num_tasks]
-    for user in users:
-        x.append(np.array(data_merge_train['user_data'][user]['x'])[0:train_set_size_per_user])
-        y.append(tf.keras.utils.to_categorical(np.array(data_merge_train['user_data'][user]['y']),
-                                               num_classes=62)[0:train_set_size_per_user])
-        xt.append(np.array(data_merge_test['user_data'][user]['x'])[0:test_set_size_per_user])
-        yt.append(tf.keras.utils.to_categorical(np.array(data_merge_test['user_data'][user]['y']),
-                                                num_classes=62)[0:test_set_size_per_user])
-    if global_data:
-        x = np.concatenate(x)
-        y = np.concatenate(y)
-        xt = np.concatenate(xt)
-        yt = np.concatenate(yt)
-
-    return x, y, xt, yt
-
-
-class DenseReparameterizationPriorUpdate(tfp.layers.DenseReparameterization):
-
-    def update_prior(self, kernel_prior_fn):
-        input_shape = self.input_shape
-        in_size = input_shape[-1]
-        dtype = tf.as_dtype(self.dtype or tf.keras.backend.floatx())
-        self.kernel_prior = kernel_prior_fn(dtype, [in_size, self.units], 'kernel_prior',
-                                            self.trainable, self.add_variable)
-        self._losses = []
-        self._apply_divergence(self.kernel_divergence_fn,
-                               self.kernel_posterior,
-                               self.kernel_prior,
-                               self.kernel_posterior_tensor,
-                               name='divergence_kernel')
+    return np.array(aulcs)

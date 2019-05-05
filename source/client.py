@@ -1,6 +1,6 @@
 import tensorflow as tf
 from tensorflow_probability.python.layers import DenseReparameterization
-from utils import get_posterior_from_layer, clone, sparse_array, get_refined_prior, gaussian_ratio_par
+from utils import get_posterior_from_layer, clone, get_refined_prior, gaussian_ratio_par
 import tensorflow_probability as tfp
 
 
