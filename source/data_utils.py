@@ -18,6 +18,10 @@ def mnist(num_tasks=1, global_data=False, train_set_size_per_user=-1, test_set_s
         y_train = np.split(y_train, num_tasks)
         x_test = [x_test for _ in range(num_tasks)]
         y_test = [y_test for _ in range(num_tasks)]
+        x_train = [x[:train_set_size_per_user] for x in x_train]
+        y_train = [y[:train_set_size_per_user] for y in y_train]
+        x_test = [x[:test_set_size_per_user] for x in x_test]
+        y_test = [y[:test_set_size_per_user] for y in y_test]
 
     return x_train, y_train, x_test, y_test
 

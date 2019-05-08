@@ -1,7 +1,9 @@
 import tensorflow as tf
 from tensorflow_probability.python.layers import DenseReparameterization
-from utils import get_posterior_from_layer, clone, get_refined_prior, gaussian_ratio_par
+from utils import get_posterior_from_layer, get_refined_prior, gaussian_ratio_par, LateralConnection, prior_wrapper
 import tensorflow_probability as tfp
+from utils import softminus
+import numpy as np
 
 
 class _Client(tf.keras.Model):
@@ -10,28 +12,46 @@ class _Client(tf.keras.Model):
         super(_Client, self).__init__(*args, **kwargs)
         self.prior_fn_server = get_refined_prior
         self.prior_fn_client = None
-        self.old_server_par = {}
+        self.q = None
+        self.t = None
         self.data_set_size = None
         self.n_samples = None
 
-    def update_prior(self, client_refining=False, data_set=None):
+    def update_prior(self, client_refining=False):
         if client_refining:
             self.prior_fn_client = lambda l: tfp.layers.default_multivariate_normal_fn
-            if data_set not in self.old_server_par:
-                self.old_server_par[data_set] = None
         else:
             self.prior_fn_client = get_posterior_from_layer
 
         for layer in self.layers:
-            if issubclass(layer.__class__, DenseReparameterization):
+            if issubclass(layer.__class__, DenseReparameterization) or isinstance(layer, LateralConnection):
                 if '_client_' not in layer.name:
-                    old_weights = None
+                    t = None
                     if client_refining:
-                        if self.old_server_par[data_set]:
-                            old_weights = self.old_server_par[data_set][layer.name]
-                    layer.update_prior(self.prior_fn_server(layer, old_weights))
+                        if self.t:
+                            t = self.t[layer.name]
+                    layer.update_prior(self.prior_fn_server(layer, t))
                 else:
-                    layer.update_prior(self.prior_fn_client(layer))
+                    layer.update_prior(prior_wrapper(self.prior_fn_client, layer))
+
+    def new_t(self, server):
+        if self.q:
+            self.t = {layer.name: gaussian_ratio_par(layer.get_weights(), self.q[layer.name])
+                      for layer in server.layers}
+        else:
+            self.t = {}
+            for layer_name, layer_weight in server.get_dict_weights().items():
+                if len(layer_weight) > 1:
+                    standard_normal = [np.zeros_like(layer_weight[0]),
+                                       softminus(np.ones_like(layer_weight[1]))]
+                    self.t[layer_name] = gaussian_ratio_par(
+                        layer_weight,
+                        standard_normal)
+                else:
+                    self.t[layer_name] = []
+
+    def set_q(self):
+        self.q = {layer.name: layer.get_weights() for layer in self.layers if '_client_' not in layer.name}
 
 
 class Client(tf.keras.Model):
@@ -59,16 +79,38 @@ class Client(tf.keras.Model):
         output = tf.keras.layers.Lambda(lambda q: tf.reduce_sum(q, axis=0))(output)
         return output
 
-    def update_prior(self, client_refining=False, data_set=None):
-        self.model.update_prior(client_refining, data_set)
+    def update_prior(self, client_refining=False):
+        self.model.update_prior(client_refining)
+
+    def new_t(self, server):
+        self.model.new_t(server)
+
+    def set_q(self):
+        self.model.set_q()
 
     @property
     def data_set_size(self):
         return self.model.data_set_size
 
     @property
-    def old_server_par(self):
-        return self.model.old_server_par
+    def layers(self):
+        return self.model.layers
+
+    @property
+    def t(self):
+        return self.model.t
+
+    @property
+    def q(self):
+        return self.model.q
+
+    @t.setter
+    def t(self, t):
+        self.model.t = t
+
+    @q.setter
+    def q(self, q):
+        self.model.q = q
 
     @data_set_size.setter
     def data_set_size(self, a):

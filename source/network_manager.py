@@ -1,8 +1,10 @@
 import tensorflow as tf
-from utils import get_posterior_from_layer, clone, get_refined_prior, gaussian_ratio_par, Gate
+from utils import get_posterior_from_layer, get_refined_prior, gaussian_ratio_par, Gate, LateralConnection
+from general_utils import clone
 from tensorflow.python.keras.engine.input_layer import InputLayer
 from client import Client
 from collections import defaultdict
+import numpy as np
 
 
 class NetworkManager:
@@ -19,7 +21,7 @@ class NetworkManager:
         self.optimizer = dict(tf.keras.optimizers.serialize(optimizer))
         self.compile_conf = kwargs
 
-    def fit(self, model_sequence, data_sequence, **kwargs):
+    def fit(self, sequence, **kwargs):
         x = kwargs.pop('x')
         y = kwargs.pop('y', None)
         validation_data = kwargs.pop('validation_data', None)
@@ -29,34 +31,32 @@ class NetworkManager:
         if test_data:
             test_data = list(test_data)
         optimizer = tf.keras.optimizers.deserialize(dict(self.optimizer))
-        sequence = list(zip(model_sequence, data_sequence))
-        refined = list(set([x for x in sequence if sequence.count(x) >= 2]))
+        unique, counts = np.unique(sequence, return_counts=True)
+        counts = dict(zip(unique, counts))
+        refined = [counts[u] > 1 for u in unique]
         history = defaultdict(list)
         evaluate = defaultdict(list)
-        for t, (i, j) in enumerate(sequence):
-            print('step ', t, ' in sequence of lenght ', len(sequence), ' task ', i)
-            self.clients[i].update_prior(client_refining=((i, j) in refined), data_set=j)
+        for t, i in enumerate(sequence):
+            print('step ', t+1, ' in sequence of lenght ', len(sequence), ' task ', i+1)
+            if t > 0:
+                self.clients[i].update_prior(client_refining=refined[i])
+                self.clients[i].set_q()
             self.clients[i].compile(optimizer, **self.compile_conf)
-            fit_config = {'x': x[j]}
+            fit_config = {'x': x[i]}
             if y:
-                fit_config['y'] = y[j]
+                fit_config['y'] = y[i]
             if validation_data:
-                fit_config['validation_data'] = validation_data[j]
+                fit_config['validation_data'] = validation_data[i]
             fit_config.update(kwargs)
             hist = self.clients[i].fit(**fit_config)
             history[i].append(hist.history)
             if test_data:
-                eval = self.clients[i].evaluate(*test_data[j])
+                eval = self.clients[i].evaluate(*test_data[i])
                 evaluate[i].append(eval)
                 print(eval)
-            if (i, j) in refined:
-                if self.clients[i].old_server_par[j]:
-                    for layer in self.clients[i].old_server_par[j]:
-                        self.clients[i].old_server_par[j][layer] = gaussian_ratio_par(
-                                                self.server.get_layer(layer).get_weights(),
-                                                self.clients[i].old_server_par[j][layer])
-                else:
-                    self.clients[i].old_server_par[j] = self.server.get_dict_weights()
+            if refined[i]:
+                self.clients[i].new_t(self.server)
+
         return history, evaluate
 
     def create_clients(self, num_clients):
@@ -71,22 +71,14 @@ class NetworkManager:
         input_tensor = server.input
         x = input_tensor
         server.client_count += 1
-        name = '_client_' + str(server.client_count)
+        name_suffix = '_client_' + str(server.client_count)
         for layer in server.layers:
             if not isinstance(layer, InputLayer):
                 if 'lateral' in layer.name:
-                    out1 = clone(layer, data_set_size=self.data_set_size, n_samples=self.n_samples,
-                                 activation='linear', name=name + '_from_client')(x)
-                    out2 = clone(layer, data_set_size=self.data_set_size, n_samples=self.n_samples,
-                                 name=name + '_from_server1')(layer.output)
-                    out2 = clone(layer, data_set_size=self.data_set_size, n_samples=self.n_samples,
-                                 activation='linear', name=name + '_from_server2')(out2)
-                    out2 = Gate()(out2)
-                    x = tf.keras.layers.add([out1, out2], name=layer.name + '_add' + name)
-                    x = tf.keras.layers.Activation(layer.get_config()['activation'],
-                                                   name=layer.name + '_activation' + name)(x)
+                    name = layer.name + name_suffix
+                    x = LateralConnection(layer, self.data_set_size, self.n_samples, name=name)([x, layer.output])
                 else:
-                    x = clone(layer, data_set_size=self.data_set_size, n_samples=self.n_samples, name=name)(x)
+                    x = clone(layer, data_set_size=self.data_set_size, n_samples=self.n_samples, name=name_suffix)(x)
         client = Client(input_tensor, x, n_samples=self.n_samples)
         client.data_set_size = self.data_set_size
         return client
