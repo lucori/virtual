@@ -130,62 +130,56 @@ def compute_gaussian_ratio(mu1, u_sigma1, mu2, u_sigma2):
 
 
 def softplus(x):
-    return np.log(np.exp(x) + 1)
+    return np.log(np.exp(x) + 1.)
 
 
 def softminus(x):
-    return np.log(np.exp(x) - 1)
-
-
-def softminus_tensor(x):
-    return tf.math.log(tf.math.exp(x) -1)
+    return np.log(np.exp(x) - 1.)
 
 
 def gaussian_ratio_par(v1, v2):
-    if v1 and v2:
-        mu1 = v1[0]
-        u_sigma1 = v1[1]
-        mu2 = v2[0]
-        u_sigma2 = v2[1]
-        mu, scale = _gaussian_ratio_par(mu1, u_sigma1, mu2, u_sigma2)
-        return mu, softminus(scale)
-    else:
-        return []
+    mu1 = v1[0]
+    u_sigma1 = v1[1]
+    mu2 = v2[0]
+    u_sigma2 = v2[1]
+    mu, scale = _gaussian_ratio_par(mu1, u_sigma1, mu2, u_sigma2)
+    return mu, softminus(scale)
+
+
+def gaussian_prod_par(v1, v2):
+    mu1 = v1[0]
+    u_sigma1 = v1[1]
+    mu2 = v2[0]
+    u_sigma2 = v2[1]
+    mu, scale = _gaussian_prod_par(mu1, u_sigma1, mu2, u_sigma2)
+    return mu, softminus(scale)
 
 
 def _gaussian_ratio_par(mu1, u_sigma1, mu2, u_sigma2):
     scale1 = compute_scale(u_sigma1)
     scale2 = compute_scale(u_sigma2)
-    #scale1 = tf.debugging.check_numerics(scale1, 'error1')
-    #scale2 = tf.debugging.check_numerics(scale2, 'error2')
-    #with tf.control_dependencies([tf.assert_none_equal(scale1, scale2)]):
-    #scale = tf.math.reciprocal(np.finfo(scale1.dtype.as_numpy_dtype).eps + tf.math.reciprocal(scale1) -
-    #                           tf.math.reciprocal(scale2))
-    #scale = tf.debugging.check_numerics(scale, 'error')
-    #mu = tf.math.multiply(scale,
-    #                      tf.math.multiply(tf.math.reciprocal(scale1), mu1) -
-    #                      tf.math.multiply(tf.math.reciprocal(scale2), mu2))
-    print(scale1,scale2)
-    print(np.any(scale1>=scale2))
-    scale = 1/(np.finfo(scale1.dtype).eps + 1/scale1 - 1/scale2)
-    mu = scale*(1/scale1*mu1 - 1/scale2*mu2)
+    #print((scale1-scale2)[scale1-scale2 >= 0])
+    scale = np.sqrt(1 / (1 / scale1 ** 2 - 1 / scale2 ** 2))
+    mu = scale ** 2 * (1 / scale1 ** 2 * mu1 - 1 / scale2 ** 2 * mu2)
+    return mu, scale
+
+
+def _gaussian_prod_par(mu1, u_sigma1, mu2, u_sigma2):
+    scale1 = compute_scale(u_sigma1)
+    scale2 = compute_scale(u_sigma2)
+    scale = np.sqrt(1 / (1 / scale1 ** 2 + 1 / scale2 ** 2))
+    mu = scale ** 2 * (1 / scale1 ** 2 * mu1 + 1 / scale2 ** 2 * mu2)
     return mu, scale
 
 
 def get_refined_prior(l1, w2):
     w1 = l1.get_weights()
-    if w2:
-        return compute_gaussian_ratio(w1[0], w1[1], w2[0], w2[1])
-    else:
-        return get_posterior_from_layer(l1)
+    return compute_gaussian_ratio(w1[0], w1[1], w2[0], w2[1])
 
 
 def get_posterior_from_layer(l):
     weights = l.get_weights()
-    if len(weights) > 1:
-        return multivariate_normal_fn(weights[0], weights[1])
-    else:
-        return
+    return multivariate_normal_fn(weights[0], weights[1])
 
 
 def prior_wrapper(posterior, l):

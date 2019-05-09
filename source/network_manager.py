@@ -16,6 +16,7 @@ class NetworkManager:
         self.compile_conf = {}
         self.data_set_size = data_set_size
         self.n_samples = n_samples
+        self.num_clients = None
 
     def compile(self, optimizer, **kwargs):
         self.optimizer = dict(tf.keras.optimizers.serialize(optimizer))
@@ -55,13 +56,14 @@ class NetworkManager:
                 evaluate[i].append(eval)
                 print(eval)
             if refined[i]:
-                self.clients[i].new_t(self.server)
+                self.clients[i].new_t()
 
         return history, evaluate
 
     def create_clients(self, num_clients):
+        self.num_clients = num_clients
         clients = []
-        for _ in range(num_clients):
+        for _ in range(self.num_clients):
             client = self.client_from_server(self.server)
             clients.append(client)
         self.clients = clients
@@ -81,6 +83,7 @@ class NetworkManager:
                     x = clone(layer, data_set_size=self.data_set_size, n_samples=self.n_samples, name=name_suffix)(x)
         client = Client(input_tensor, x, n_samples=self.n_samples)
         client.data_set_size = self.data_set_size
+        client.num_clients = self.num_clients
         return client
 
     def summary(self):
