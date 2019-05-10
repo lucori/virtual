@@ -1,20 +1,20 @@
 {
     "session":{
         "num_gpus": 1,
-        "gpus": null,
+        "gpus": "3",
         "experiment_name": "federated_exp_mnist"
     },
     "data_set":{
-        "num_tasks": 10,
-        "data_set_size_per_user": 6000,
+        "num_tasks": 5,
+        "data_set_size_per_user": 1000,
         "test_set_size_per_user": 10000,
         "generator": "mnist"
     },
     "training":{
-      "num_epochs": 10000,
+      "num_epochs": 1000,
       "batch_size": 32,
-      "num_refining": 5,
-      "patience": 10,
+      "num_refining": 2,
+      "patience": 50,
       "learning_rate": 0.001,
       "validation_split": 0.2,
       "verbose": 1
