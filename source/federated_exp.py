@@ -7,6 +7,7 @@ import numpy as np
 from sacred import Experiment
 from sacred.observers import FileStorageObserver
 from sacred.utils import apply_backspaces_and_linefeeds
+from test import DenseReparameterizationWithUpdates
 
 ex = Experiment("experiments")
 
