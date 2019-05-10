@@ -64,8 +64,8 @@ def get_mlp_server(input_shape, layer, layer_units, activations, data_set_size, 
     server.add(tf.keras.layers.Flatten())
     for i, (u, act) in enumerate(zip(layer_units, activations)):
         server.add(layer(u, activation=act, name='lateral' + str(i),
-              kernel_divergence_fn=
-              lambda q, p, _: tfp.distributions.kl_divergence(q, p)/(data_set_size*num_samples)))
+                         kernel_divergence_fn=
+                         lambda q, p, _: tfp.distributions.kl_divergence(q, p)/(data_set_size*num_samples)))
     return server
 
 

@@ -46,18 +46,56 @@ class Gate(tf.keras.layers.Layer):
 
 class DenseReparameterizationPriorUpdate(tfp.layers.DenseReparameterization):
 
+    def build(self, input_shape):
+        super(DenseReparameterizationPriorUpdate, self).build(input_shape)
+        self.reparametrized = False
+
     def update_prior(self, kernel_prior_fn):
         input_shape = self.input_shape
         in_size = input_shape[-1]
         dtype = tf.as_dtype(self.dtype or tf.keras.backend.floatx())
         self.kernel_prior = kernel_prior_fn(dtype, [in_size, self.units], 'kernel_prior',
                                             self.trainable, self.add_variable)
+        if self.reparametrized:
+            self.reparametrize_posterior()
+        self.update_loss()
+
+    def update_loss(self):
         self._losses = []
         self._apply_divergence(self.kernel_divergence_fn,
                                self.kernel_posterior,
                                self.kernel_prior,
                                self.kernel_posterior_tensor,
                                name='divergence_kernel')
+
+    def reparametrize_posterior(self):
+        prior_par = self.kernel_prior.parameters
+        self.prior_loc = prior_par['distribution'].parameters['loc']
+        self.prior_scale = prior_par['distribution'].parameters['scale']
+        self.kernel_posterior = self.compute_new_posterior()
+        self.update_loss()
+        self.reparametrized = True
+
+    def compute_new_posterior(self):
+        scale1 = (np.finfo(self.weights[1].dtype.as_numpy_dtype).eps +
+                  tf.nn.softplus(self.weights[1]))
+        scale = tf.math.sqrt(tf.math.reciprocal(tf.math.reciprocal(tf.math.square(scale1)) +
+                                                tf.math.reciprocal(tf.math.square(self.prior_scale))))
+        loc = tf.math.multiply(tf.math.square(scale), tf.math.multiply(tf.math.reciprocal(tf.math.square(scale1)),
+                                                                       self.weights[0]) +
+                               tf.math.multiply(tf.math.reciprocal(tf.math.square(self.prior_scale)), self.prior_loc))
+        dist = tfd.Normal(loc=loc, scale=scale)
+        batch_ndims = tf.size(input=dist.batch_shape_tensor())
+        return tfd.Independent(dist, reinterpreted_batch_ndims=batch_ndims)
+
+    def get_weights(self):
+        weights = super(DenseReparameterizationPriorUpdate, self).get_weights()
+        if self.reparametrized:
+            weights[0], weights[1] = gaussian_prod_par(weights, [self.prior_loc, softminus(self.prior_scale)])
+        return weights
+
+    def get_t(self):
+        return super(DenseReparameterizationPriorUpdate, self).get_weights()
 
 
 class LateralConnection(tf.keras.layers.Layer):
@@ -158,7 +196,6 @@ def gaussian_prod_par(v1, v2):
 def _gaussian_ratio_par(mu1, u_sigma1, mu2, u_sigma2):
     scale1 = compute_scale(u_sigma1)
     scale2 = compute_scale(u_sigma2)
-    #print((scale1-scale2)[scale1-scale2 >= 0])
     scale = np.sqrt(1 / (1 / scale1 ** 2 - 1 / scale2 ** 2))
     mu = scale ** 2 * (1 / scale1 ** 2 * mu1 - 1 / scale2 ** 2 * mu2)
     return mu, scale
