@@ -2,21 +2,22 @@
     "session":{
         "num_gpus": 1,
         "gpus": null,
-        "experiment_name": "federated_exp_permuted_mnist"
+        "experiment_name": "federated_exp_permuted_mnist",
+        "num_runs": 5
     },
     "data_set":{
         "num_tasks": 10,
-        "data_set_size_per_user": 6000,
+        "data_set_size_per_user": 60000,
         "test_set_size_per_user": 10000,
         "generator": "permuted_mnist"
     },
     "training":{
-      "num_epochs": 10000,
-      "batch_size": 32,
-      "num_refining": 5,
+      "num_epochs": 100,
+      "batch_size": 256,
+      "num_refining": 2,
       "patience": 10,
       "learning_rate": 0.001,
-      "validation_split": 0.2,
+      "validation_split": 0.16666,
       "verbose": 1
     },
     "model":{

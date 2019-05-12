@@ -2,16 +2,17 @@
     "session":{
         "num_gpus": 1,
         "gpus": null,
-        "experiment_name": "federated_exp_femnist"
+        "experiment_name": "federated_exp_femnist",
+        "num_runs": 1
     },
     "data_set":{
-        "num_tasks": 20,
+        "num_tasks": 10,
         "data_set_size_per_user": 250,
         "test_set_size_per_user": -1,
         "generator": "femnist"
     },
     "training":{
-      "num_epochs": 10000,
+      "num_epochs": 200,
       "batch_size": 32,
       "num_refining": 2,
       "patience": 100,

@@ -2,29 +2,29 @@
     "session":{
         "num_gpus": 1,
         "gpus": null,
-        "experiment_name": "federated_exp_mnist",
+        "experiment_name": "federated_exp_gleam",
         "num_runs": 1
     },
     "data_set":{
-        "num_tasks": 10,
-        "data_set_size_per_user": 6000,
-        "test_set_size_per_user": 10000,
-        "generator": "mnist"
+        "num_tasks": 38,
+        "data_set_size_per_user": 86,
+        "test_set_size_per_user": -1,
+        "generator": "gleam"
     },
     "training":{
       "num_epochs": 100,
-      "batch_size": 256,
-      "num_refining": 3,
+      "batch_size": 16,
+      "num_refining": 2,
       "patience": 10,
       "learning_rate": 0.001,
-      "validation_split": 0.16666,
+      "validation_split": 0.1,
       "verbose": 1
     },
     "model":{
       "num_samples": 10,
-      "input_shape": [28,28,1],
+      "input_shape": [180],
       "layer": "DenseReparameterizationPriorUpdate",
-      "layer_units": [50,50, 10],
+      "layer_units": [100, 100, 7],
       "activations": ["relu", "relu", "softmax"]
     }
 }

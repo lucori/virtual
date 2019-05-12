@@ -30,12 +30,8 @@ class _Client(tf.keras.Model):
             if issubclass(layer.__class__, DenseReparameterization) or isinstance(layer, LateralConnection):
                 if layer in self.server_variational_layers:
                     layer.update_prior(self.prior_fn_server(layer, self.t[layer.name]))
-                else
+                else:
                     layer.update_prior(prior_wrapper(self.prior_fn_client, layer))
-
-    def new_t_old(self):
-        self.t = {layer.name: gaussian_ratio_par(gaussian_prod_par(layer.get_weights(), self.t[layer.name]),
-                                                 self.q[layer.name]) for layer in self.server_variational_layers}
 
     def new_t(self):
         self.t = {layer.name: layer.get_t() for layer in self.server_variational_layers}

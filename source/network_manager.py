@@ -31,7 +31,6 @@ class NetworkManager:
             validation_data = list(validation_data)
         if test_data:
             test_data = list(test_data)
-        optimizer = tf.keras.optimizers.deserialize(dict(self.optimizer))
         unique, counts = np.unique(sequence, return_counts=True)
         counts = dict(zip(unique, counts))
         refined = [counts[u] > 1 for u in unique]
@@ -42,6 +41,7 @@ class NetworkManager:
             if t > 0:
                 self.clients[i].update_prior(client_refining=refined[i])
                 self.clients[i].set_q()
+            optimizer = tf.keras.optimizers.deserialize(dict(self.optimizer))
             self.clients[i].compile(optimizer, **self.compile_conf)
             fit_config = {'x': x[i]}
             if y:

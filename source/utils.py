@@ -56,6 +56,7 @@ class DenseReparameterizationPriorUpdate(tfp.layers.DenseReparameterization):
         dtype = tf.as_dtype(self.dtype or tf.keras.backend.floatx())
         self.kernel_prior = kernel_prior_fn(dtype, [in_size, self.units], 'kernel_prior',
                                             self.trainable, self.add_variable)
+        self.reinitialize_weights()
         if self.reparametrized:
             self.reparametrize_posterior()
         self.update_loss()
@@ -87,6 +88,11 @@ class DenseReparameterizationPriorUpdate(tfp.layers.DenseReparameterization):
         dist = tfd.Normal(loc=loc, scale=scale)
         batch_ndims = tf.size(input=dist.batch_shape_tensor())
         return tfd.Independent(dist, reinterpreted_batch_ndims=batch_ndims)
+
+    def reinitialize_weights(self):
+        tf.assign(self.weights[0], tf.random_normal_initializer(stddev=0.1)(self.weights[0].shape))
+        tf.assign(self.weights[1], tf.random_normal_initializer(mean=-3.0, stddev=0.1)(self.weights[1].shape))
+        tf.assign(self.weights[2], tf.random_normal_initializer(stddev=0.1)(self.weights[2].shape))
 
     def get_weights(self):
         weights = super(DenseReparameterizationPriorUpdate, self).get_weights()
