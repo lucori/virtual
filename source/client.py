@@ -1,6 +1,7 @@
 import tensorflow as tf
 from tensorflow_probability.python.layers import DenseReparameterization
-from utils import get_posterior_from_layer, get_refined_prior, gaussian_ratio_par, LateralConnection, prior_wrapper, gaussian_prod_par
+from utils import get_posterior_from_layer, get_refined_prior, gaussian_ratio_par, prior_wrapper, gaussian_prod_par
+from layers import LateralConnection
 import tensorflow_probability as tfp
 from utils import softminus
 import numpy as np
@@ -29,22 +30,13 @@ class _Client(tf.keras.Model):
         for layer in self.layers:
             if issubclass(layer.__class__, DenseReparameterization) or isinstance(layer, LateralConnection):
                 if layer in self.server_variational_layers:
+                    layer.update_divergence(self.data_set_size*self.n_samples)
                     layer.update_prior(self.prior_fn_server(layer, self.t[layer.name]))
                 else:
                     layer.update_prior(prior_wrapper(self.prior_fn_client, layer))
 
     def new_t(self):
         self.t = {layer.name: layer.get_t() for layer in self.server_variational_layers}
-
-    def set_q(self):
-        self.q = {layer.name: layer.get_weights() for layer in self.server_variational_layers}
-
-    def initialize_q(self):
-        def standard_normal(layer):
-            shape = layer.weights[0].shape.as_list()
-            return [np.zeros(shape, dtype=np.float32),
-                    softminus(np.sqrt((self.num_clients - 1)/self.num_clients)*np.ones(shape, dtype=np.float32))]
-        self.q = {layer.name: standard_normal(layer) for layer in self.server_variational_layers}
 
     def initialize_t(self):
         def standard_normal(layer):
@@ -85,9 +77,6 @@ class Client(tf.keras.Model):
     def new_t(self):
         self.model.new_t()
 
-    def set_q(self):
-        self.model.set_q()
-
     @property
     def data_set_size(self):
         return self.model.data_set_size
@@ -99,7 +88,6 @@ class Client(tf.keras.Model):
     @num_clients.setter
     def num_clients(self, num_clients):
         self.model.num_clients = num_clients
-        self.model.initialize_q()
         self.model.initialize_t()
 
     @property
@@ -110,17 +98,9 @@ class Client(tf.keras.Model):
     def t(self):
         return self.model.t
 
-    @property
-    def q(self):
-        return self.model.q
-
     @t.setter
     def t(self, t):
         self.model.t = t
-
-    @q.setter
-    def q(self, q):
-        self.model.q = q
 
     @data_set_size.setter
     def data_set_size(self, a):

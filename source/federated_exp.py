@@ -1,7 +1,7 @@
 import tensorflow as tf
-from utils import DenseReparameterizationPriorUpdate
 from general_utils import gpu_session, get_mlp_server, aulc
 from data_utils import *
+from layers import DenseReparameterizationPriorUpdate
 from network_manager import NetworkManager
 import numpy as np
 from sacred import Experiment
@@ -85,20 +85,30 @@ def run(session, data_set, training, model):
         x, y, x_t, y_t = data_set['generator'](data_set['num_tasks'], global_data=False,
                                                train_set_size_per_user=data_set['data_set_size_per_user'],
                                                test_set_size_per_user=data_set['test_set_size_per_user'])
-
+        data_set_size = [x_i.shape[0] for x_i in x]
+        print(data_set_size)
         network_m = NetworkManager(
             get_mlp_server(model['input_shape'], model['layer'], model['layer_units'],
-                           model['activations'], data_set['train_set_size_per_user'], model['num_samples']),
-                                data_set_size=data_set['train_set_size_per_user'], n_samples=model['num_samples'])
+                           model['activations'], data_set_size[0], model['num_samples']),
+                                data_set_size=data_set_size, n_samples=model['num_samples'])
         network_m.create_clients(data_set['num_tasks'])
         network_m.compile(optimizer=tf.keras.optimizers.Adam(training['learning_rate']),
                           loss=tf.keras.losses.categorical_crossentropy,
                           metrics=[tf.keras.metrics.categorical_accuracy])
         sequence = np.tile(range(data_set['num_tasks']), training['num_refining'])
-        history_virtual, evaluation_virtual = network_m.fit(sequence,
-                                x=x, y=y, validation_split=training['validation_split'],
-                                epochs=training['num_epochs'], test_data=zip(x_t, y_t), batch_size=training['batch_size'],
-                                callbacks=[early_stopping], verbose=training['verbose'])
+        fit_args_virtual = {'sequence': sequence,
+                            'x': x,
+                            'y': y,
+                            'validation_split': training['validation_split'],
+                            'validation_data': zip(x_t, y_t),
+                            'epochs': training['num_epochs'],
+                            'test_data': zip(x_t, y_t),
+                            'batch_size': training['batch_size'],
+                            'verbose': training['verbose']
+                            }
+        if training['early_stopping']:
+            fit_args_virtual['callbacks']= [early_stopping]
+        history_virtual, evaluation_virtual = network_m.fit(**fit_args_virtual)
         print('virtual done')
 
         history_local = {}
@@ -108,14 +118,23 @@ def run(session, data_set, training, model):
             network_m = NetworkManager(get_mlp_server(model['input_shape'], model['layer'], model['layer_units'],
                                                       model['activations'], data_set['train_set_size_per_user'],
                                                       model['num_samples']),
-                                       data_set_size=data_set['train_set_size_per_user'], n_samples=model['num_samples'])
+                                       data_set_size=data_set['train_set_size_per_user'],
+                                       n_samples=model['num_samples'])
             single_model = network_m.create_clients(1)[0]
             single_model.compile(optimizer=tf.keras.optimizers.Adam(training['learning_rate']),
                                  loss=tf.keras.losses.categorical_crossentropy,
                                  metrics=[tf.keras.metrics.categorical_accuracy])
-            history_local[n] = single_model.fit(x=x[n], y=y[n], validation_split=training['validation_split'],
-                                                epochs=training['num_epochs'], batch_size=training['batch_size'],
-                                                callbacks=[early_stopping], verbose=training['verbose']).history
+            fit_args_local = {'x': x[n],
+                              'y': y[n],
+                              'validation_split': training['validation_split'],
+                              'validation_data': (x_t[n],y_t[n]),
+                              'epochs': training['num_epochs'],
+                              'batch_size': training['batch_size'],
+                              'verbose': training['verbose']
+                              }
+            if training['early_stopping']:
+                fit_args_local['callbacks'] = [early_stopping]
+            history_local[n] = single_model.fit(**fit_args_local).history
             evaluation_local[n] = single_model.evaluate(x_t[n], y_t[n])
             print(evaluation_local[n])
 
@@ -130,19 +149,24 @@ def run(session, data_set, training, model):
                           loss=tf.keras.losses.categorical_crossentropy,
                           metrics=[tf.keras.metrics.categorical_accuracy])
         print('starting global model')
-        history_global = global_net.fit(x=x,
-                                 y=y,
-                                 epochs=training['num_epochs'],
-                                 validation_split=training['validation_split'],
-                                 batch_size=training['batch_size'],
-                                 callbacks=[early_stopping], verbose=training['verbose']
-                                 ).history
+        fit_args_global = {'x': x,
+                           'y': y,
+                           'validation_split': training['validation_split'],
+                           'validation_data': (x_t, y_t),
+                           'epochs': training['num_epochs'],
+                           'batch_size': training['batch_size'],
+                           'verbose': training['verbose']
+                           }
+        if training['early_stopping']:
+            fit_args_global['callbacks'] = [early_stopping]
+        history_global = global_net.fit(**fit_args_global).history
         evaluation_global = global_net.evaluate(x_t, y_t)
 
         local_average = np.array(list(evaluation_local.values())).mean(axis=0)
         virtual_average = np.array(list(evaluation_virtual.values())).mean(axis=(0, 1))
         normalized_accuracy = np.array([(np.array(v)/np.array(l)) for (v, l) in
-                               zip(list(evaluation_virtual.values()), list(evaluation_local.values()))])[:, :, 1]
+                                       zip(list(evaluation_virtual.values()),
+                                           list(evaluation_local.values()))])[:, :, 1]
         aulcs = aulc(history_virtual)
 
         history_virtual_multi_runs.append(history_virtual)
