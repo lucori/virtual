@@ -61,12 +61,11 @@ def get_globals(data_set, model):
 def run(session, data_set, training, model):
     get_globals()
     config, distribution = gpu_session(num_gpus=session['num_gpus'], gpus=session['gpus'])
+    early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=training['patience'],
+                                                      restore_best_weights=True)
     if config:
         sess = tf.Session(config=config)
         tf.keras.backend.set_session(sess)
-
-    early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=training['patience'],
-                                                      restore_best_weights=True)
 
     history_local_multi_runs = []
     history_virtual_multi_runs = []
@@ -87,11 +86,11 @@ def run(session, data_set, training, model):
                                                test_set_size_per_user=data_set['test_set_size_per_user'])
         data_set_size = [x_i.shape[0] for x_i in x]
         print(data_set_size)
-        network_m = NetworkManager(
-            get_mlp_server(model['input_shape'], model['layer'], model['layer_units'],
-                           model['activations'], data_set_size[0], model['num_samples']),
-                                data_set_size=data_set_size, n_samples=model['num_samples'])
-        network_m.create_clients(data_set['num_tasks'])
+        network_m = NetworkManager(lambda dt_size: get_mlp_server(model['input_shape'], model['layer'],
+                                                                  model['layer_units'], model['activations'],
+                                                                  dt_size, model['num_samples']),
+                                   data_set_size=data_set_size, n_samples=model['num_samples'],
+                                   num_clients=data_set['num_tasks'], sess_config=config)
         network_m.compile(optimizer=tf.keras.optimizers.Adam(training['learning_rate']),
                           loss=tf.keras.losses.categorical_crossentropy,
                           metrics=[tf.keras.metrics.categorical_accuracy])
@@ -107,7 +106,7 @@ def run(session, data_set, training, model):
                             'verbose': training['verbose']
                             }
         if training['early_stopping']:
-            fit_args_virtual['callbacks']= [early_stopping]
+            fit_args_virtual['callbacks'] = [early_stopping]
         history_virtual, evaluation_virtual = network_m.fit(**fit_args_virtual)
         print('virtual done')
 
@@ -115,28 +114,33 @@ def run(session, data_set, training, model):
         evaluation_local = {}
         for n in range(data_set['num_tasks']):
             print('local model number ', n+1)
-            network_m = NetworkManager(get_mlp_server(model['input_shape'], model['layer'], model['layer_units'],
-                                                      model['activations'], data_set['train_set_size_per_user'],
-                                                      model['num_samples']),
-                                       data_set_size=data_set['train_set_size_per_user'],
-                                       n_samples=model['num_samples'])
-            single_model = network_m.create_clients(1)[0]
-            single_model.compile(optimizer=tf.keras.optimizers.Adam(training['learning_rate']),
-                                 loss=tf.keras.losses.categorical_crossentropy,
-                                 metrics=[tf.keras.metrics.categorical_accuracy])
-            fit_args_local = {'x': x[n],
-                              'y': y[n],
-                              'validation_split': training['validation_split'],
-                              'validation_data': (x_t[n],y_t[n]),
-                              'epochs': training['num_epochs'],
-                              'batch_size': training['batch_size'],
-                              'verbose': training['verbose']
-                              }
+            network_m = NetworkManager(lambda dt_size: get_mlp_server(model['input_shape'], model['layer'],
+                                                                      model['layer_units'], model['activations'],
+                                                                      dt_size, model['num_samples']),
+                                       data_set_size=data_set_size, n_samples=model['num_samples'],
+                                       num_clients=data_set['num_tasks'])
+            network_m.compile(optimizer=tf.keras.optimizers.Adam(training['learning_rate']),
+                              loss=tf.keras.losses.categorical_crossentropy,
+                              metrics=[tf.keras.metrics.categorical_accuracy])
+            sequence = [n]
+            fit_args_local = {'sequence': sequence,
+                                'x': x,
+                                'y': y,
+                                'validation_split': training['validation_split'],
+                                'validation_data': zip(x_t, y_t),
+                                'epochs': training['num_epochs'],
+                                'test_data': zip(x_t, y_t),
+                                'batch_size': training['batch_size'],
+                                'verbose': training['verbose']
+                                }
             if training['early_stopping']:
                 fit_args_local['callbacks'] = [early_stopping]
-            history_local[n] = single_model.fit(**fit_args_local).history
-            evaluation_local[n] = single_model.evaluate(x_t[n], y_t[n])
+            history_local, evaluation_local = network_m.fit(**fit_args_local)
             print(evaluation_local[n])
+            tf.reset_default_graph()
+            if config:
+                sess = tf.Session(config=config)
+                tf.keras.backend.set_session(sess)
 
         x = np.concatenate(x)
         y = np.concatenate(y)

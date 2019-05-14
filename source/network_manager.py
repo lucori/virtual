@@ -5,18 +5,34 @@ from tensorflow.python.keras.engine.input_layer import InputLayer
 from client import Client
 from collections import defaultdict
 import numpy as np
+from utils import softminus
 
 
 class NetworkManager:
 
-    def __init__(self, server, data_set_size=None, n_samples=10):
-        self.server = server
-        self.clients = []
+    def __init__(self, server_fn, data_set_size=None, n_samples=10, num_clients=None, sess_config=None):
+        self.server_fn = server_fn
+        self.client = None
         self.optimizer = None
         self.compile_conf = {}
         self.data_set_size = data_set_size
         self.n_samples = n_samples
-        self.num_clients = None
+        if num_clients:
+            self.num_clients = num_clients
+        elif data_set_size:
+            self.num_clients = len(data_set_size)
+        else:
+            self.num_clients = None
+        self.create_server(0)
+        self.server_variational_layer_names = [layer.name for layer in self.server.layers
+                                               if '_client_' not in layer.name and len(layer.weights) > 1]
+        self.initialize_t()
+        self.q = None
+        self.sess_config = sess_config
+        tf.reset_default_graph()
+        if self.sess_config:
+            sess = tf.Session(config=self.sess_config)
+            tf.keras.backend.set_session(sess)
 
     def compile(self, optimizer, **kwargs):
         self.optimizer = dict(tf.keras.optimizers.serialize(optimizer))
@@ -33,21 +49,19 @@ class NetworkManager:
             validation_data = list(validation_data)
         if test_data:
             test_data = list(test_data)
-        unique, counts = np.unique(sequence, return_counts=True)
-        counts = dict(zip(unique, counts))
-        refined = [counts[u] > 1 for u in unique]
         history = defaultdict(list)
         evaluate = defaultdict(list)
         for t, i in enumerate(sequence):
             print('step ', t+1, ' in sequence of lenght ', len(sequence), ' task ', i+1)
-            if t > 0:
-                print('updating prior')
-                with timeit_context('prior update'):
-                    self.clients[i].update_prior(client_refining=refined[i])
-                print('prior updated')
+            self.create_server(i)
+            self.client = self.client_from_server(i)
+            print('updating prior')
+            with timeit_context('prior update'):
+                self.server.update_prior(self.q, self.t[i])
+            print('prior updated')
             optimizer = tf.keras.optimizers.deserialize(dict(self.optimizer))
             print('compiling client')
-            self.clients[i].compile(optimizer, **self.compile_conf)
+            self.client.compile(optimizer, **self.compile_conf)
             print('client compiled')
             fit_config = {'x': x[i]}
             if y:
@@ -60,44 +74,48 @@ class NetworkManager:
                 fit_config['validation_steps'] = validation_steps[i]
             fit_config.update(kwargs)
             with timeit_context('fit'):
-                hist = self.clients[i].fit(**fit_config)
+                hist = self.client.fit(**fit_config)
             history[i].append(hist.history)
             if test_data:
-                eval = self.clients[i].evaluate(*test_data[i])
+                eval = self.client.evaluate(*test_data[i])
                 evaluate[i].append(eval)
                 print(eval)
-            if refined[i]:
-                print('computing new t')
-                self.clients[i].new_t()
-                print('new t computed')
+            print('computing new t')
+            with timeit_context('t and q'):
+                self.t[i] = self.server.get_t()
+                self.q = self.server.get_q()
+            print('new t computed')
+            tf.reset_default_graph()
+            if self.sess_config:
+                sess = tf.Session(config=self.sess_config)
+                tf.keras.backend.set_session(sess)
+
         return history, evaluate
 
-    def create_clients(self, num_clients):
-        self.num_clients = num_clients
-        clients = []
-        for i in range(self.num_clients):
-            client = self.client_from_server(self.server, self.data_set_size[i])
-            clients.append(client)
-        self.clients = clients
-        return clients
-
-    def client_from_server(self, server, data_set_size):
-        input_tensor = server.input
+    def client_from_server(self, indx):
+        input_tensor = self.server.input
         x = input_tensor
-        server.client_count += 1
-        name_suffix = '_client_' + str(server.client_count)
-        for layer in server.layers:
+        name_suffix = '_client_'
+        for layer in self.server.layers:
             if not isinstance(layer, InputLayer):
                 if 'lateral' in layer.name:
                     name = layer.name + name_suffix
-                    x = LateralConnection(layer, data_set_size, self.n_samples, name=name)([x, layer.output])
+                    x = LateralConnection(layer, self.data_set_size[indx], self.n_samples, name=name)([x, layer.output])
                 else:
-                    x = clone(layer, data_set_size=data_set_size, n_samples=self.n_samples, name=name_suffix)(x)
+                    x = clone(layer, data_set_size=self.data_set_size[indx], n_samples=self.n_samples,
+                              name=name_suffix)(x)
         client = Client(input_tensor, x, n_samples=self.n_samples)
-        client.data_set_size = data_set_size
-        client.num_clients = self.num_clients
         return client
 
-    def summary(self):
-        for c in self.clients:
-            c.summary()
+    def create_server(self, indx):
+        self.server = self.server_fn(self.data_set_size[indx])
+
+    def initialize_t(self):
+        def standard_normal(layer):
+            shape = layer.weights[0].shape.as_list()
+            return [np.zeros(shape, dtype=np.float32),
+                    softminus(np.sqrt(self.num_clients - 1) * np.ones(shape, dtype=np.float32))]
+
+        self.t = [{layer_name: standard_normal(self.server.get_layer(layer_name))
+                   for layer_name in self.server_variational_layer_names} for _ in range(self.num_clients)]
+

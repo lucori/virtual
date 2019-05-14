@@ -3,6 +3,13 @@ import numpy as np
 from tensorflow_probability.python import  distributions as tfd
 
 
+def default_np_multivariate_normal_fn(dtype, shape, name, trainable, add_variable_fn):
+    del name, trainable, add_variable_fn
+    dist = tfd.Normal(loc=np.zeros(shape, dtype.as_numpy_dtype), scale=dtype.as_numpy_dtype(1))
+    batch_ndims = tf.size(input=dist.batch_shape_tensor())
+    return tfd.Independent(dist, reinterpreted_batch_ndims=batch_ndims)
+
+
 def multivariate_normal_fn(mu, u_sigma):
     def _fn(dtype, shape, name, trainable, add_variable_fn):
         del name, trainable, add_variable_fn, shape
@@ -74,18 +81,5 @@ def _gaussian_prod_par(mu1, u_sigma1, mu2, u_sigma2):
     return mu, scale
 
 
-def get_refined_prior(l1, w2):
-    w1 = l1.get_weights()
+def get_refined_prior(w1, w2):
     return compute_gaussian_ratio(w1[0], w1[1], w2[0], w2[1])
-
-
-def get_posterior_from_layer(l):
-    weights = l.get_weights()
-    return multivariate_normal_fn(weights[0], weights[1])
-
-
-def prior_wrapper(posterior, l):
-    if hasattr(l, 'layers'):
-        return [posterior(la) for la in l.layers]
-    else:
-        return posterior(l)
