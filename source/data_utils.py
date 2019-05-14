@@ -3,7 +3,22 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 
 
-def mnist(num_tasks=1, global_data=False, train_set_size_per_user=-1, test_set_size_per_user=-1):
+def data_processor(x, y, num_tasks=-1, min_data_set_size_per_user=0, max_data_set_size_per_user=None,
+                   test_size=0.25):
+
+    x, y = zip(*[(x_i, y_i) for x_i, y_i in zip(x, y) if x_i.shape[0] >= min_data_set_size_per_user])
+    if max_data_set_size_per_user:
+        x = [x_i[:max_data_set_size_per_user] for x_i in x]
+        y = [y_i[:max_data_set_size_per_user] for y_i in y]
+
+    x = x[:num_tasks]
+    y = y[:num_tasks]
+    x, x_t, y, y_t = zip(*[train_test_split(x_i, y_i, test_size=test_size) for x_i, y_i in zip(x, y)])
+    return x, y, x_t, y_t
+
+
+def mnist(num_tasks=1, global_data=False, min_data_set_size_per_user=None, max_data_set_size_per_user=None,
+          test_size=None):
     (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
     x_train = x_train.astype('float32')
     x_test = x_test.astype('float32')
@@ -13,60 +28,39 @@ def mnist(num_tasks=1, global_data=False, train_set_size_per_user=-1, test_set_s
     x_test = x_test.reshape(10000, 28, 28, 1)
     x_train /= 126
     x_test /= 126
+    x = np.concatenate([x_train, x_test])
+    y = np.concatenate([y_train, y_test])
 
     if not global_data:
-        x_train = np.split(x_train, num_tasks)
-        y_train = np.split(y_train, num_tasks)
-        x_test = [x_test for _ in range(num_tasks)]
-        y_test = [y_test for _ in range(num_tasks)]
-        x_train = [x[:train_set_size_per_user] for x in x_train]
-        y_train = [y[:train_set_size_per_user] for y in y_train]
-        x_test = [x[:test_set_size_per_user] for x in x_test]
-        y_test = [y[:test_set_size_per_user] for y in y_test]
+        x = np.split(x, num_tasks)
+        y = np.split(y, num_tasks)
 
-    return x_train, y_train, x_test, y_test
+    if test_size:
+        return data_processor(x, y, num_tasks, min_data_set_size_per_user, max_data_set_size_per_user, test_size)
+    else:
+        return x, y
 
 
-def permute(x_train, x_test):
+def permute(x):
 
-    def shuffle(x, indx):
+    def shuffle(a, i):
         shape = x[0].shape
-        for i, _ in enumerate(x):
-            x[i] = (x[i].flatten()[indx]).reshape(shape)
-        return x
-    indx = np.random.permutation(x_train[0].size)
-    x_train = shuffle(x_train, indx)
-    x_test = shuffle(x_test, indx)
-    return x_train, x_test
+        for j, _ in enumerate(a):
+            a[j] = (a[j].flatten()[i]).reshape(shape)
+        return a
+    indx = np.random.permutation(x[0].size)
+    return shuffle(x, indx)
 
 
-def permuted_mnist(num_tasks, global_data=False, train_set_size_per_user=-1, test_set_size_per_user=-1):
-    x_train, y_train, x_test, y_test = mnist(global_data=True)
-    x = []
-    x_t = []
-    y = []
-    y_t = []
-    x_train = x_train[:train_set_size_per_user]
-    y_train = y_train[:train_set_size_per_user]
-    x_test = x_test[:test_set_size_per_user]
-    y_test = y_test[:test_set_size_per_user]
-    for _ in range(num_tasks):
-        x_train_perm, x_test_perm = permute(x_train, x_test)
-        x.append(x_train_perm)
-        x_t.append(x_test_perm)
-        y.append(y_train)
-        y_t.append(y_test)
+def permuted_mnist(num_tasks=10, min_data_set_size_per_user=None, max_data_set_size_per_user=None,
+                   test_size=None):
+    x, y = mnist(global_data=True, test_size=None)
+    x, y = zip(*[(permute(x), y) for _ in range(num_tasks)])
 
-    if global_data:
-        x = np.concatenate(x)
-        y = np.concatenate(y)
-        x_t = np.concatenate(x_t)
-        y_t = np.concatenate(y_t)
-
-    return x, y, x_t, y_t
+    return data_processor(x, y, num_tasks, min_data_set_size_per_user, max_data_set_size_per_user, test_size)
 
 
-def femnist(num_tasks, global_data=False, train_set_size_per_user=-1, test_set_size_per_user=-1):
+def femnist(num_tasks=-1, min_data_set_size_per_user=None, max_data_set_size_per_user=None, test_size=None):
     import os
     import json
     data = []
@@ -74,7 +68,6 @@ def femnist(num_tasks, global_data=False, train_set_size_per_user=-1, test_set_s
     dir_path = os.path.dirname(dir_path)
     dir_path_train = os.path.join(dir_path, 'leaf/data/femnist/data/train')
     dir_path_test = os.path.join(dir_path, 'leaf/data/femnist/data/test')
-    min_train_set_size_per_user = 250
 
     for file_name in os.listdir(dir_path_train):
         file = os.path.join(dir_path_train, file_name)
@@ -101,32 +94,21 @@ def femnist(num_tasks, global_data=False, train_set_size_per_user=-1, test_set_s
 
     x = []
     y = []
-    xt = []
-    yt = []
 
-    users = [u for u, n in zip(data_merge_train['users'], data_merge_train['num_samples'])
-             if n >= min_train_set_size_per_user]
-    users = users[0:num_tasks]
-    for user in users:
-        x.append(np.array(data_merge_train['user_data'][user]['x'])[0:train_set_size_per_user])
-        y.append(tf.keras.utils.to_categorical(np.array(data_merge_train['user_data'][user]['y']),
-                                               num_classes=62)[0:train_set_size_per_user])
-        xt.append(np.array(data_merge_test['user_data'][user]['x'])[0:test_set_size_per_user])
-        yt.append(tf.keras.utils.to_categorical(np.array(data_merge_test['user_data'][user]['y']),
-                                                num_classes=62)[0:test_set_size_per_user])
-    if global_data:
-        x = np.concatenate(x)
-        y = np.concatenate(y)
-        xt = np.concatenate(xt)
-        yt = np.concatenate(yt)
+    for user in data_merge_train['users']:
+        x_merge = np.concatenate([np.array(data_merge_train['user_data'][user]['x']),
+                                  np.array(data_merge_test['user_data'][user]['x'])])
+        y_merge = np.concatenate([np.array(data_merge_train['user_data'][user]['y']),
+                                  np.array(data_merge_test['user_data'][user]['y'])])
+        x.append(x_merge)
+        y.append(tf.keras.utils.to_categorical(y_merge, num_classes=62))
 
-    return x, y, xt, yt
+    return data_processor(x, y, num_tasks, min_data_set_size_per_user, max_data_set_size_per_user, test_size)
 
 
-def human_activity(num_tasks=30, global_data=False, train_set_size_per_user=-1, test_set_size_per_user=-1):
+def human_activity(num_tasks=-1, min_data_set_size_per_user=None, max_data_set_size_per_user=None, test_size=None):
     import os
     import pandas as pd
-    from sklearn.model_selection import train_test_split
     dir_path = os.path.dirname(os.path.realpath(__file__))
     dir_path = os.path.dirname(dir_path)
     dir_path_train = os.path.join(dir_path, 'leaf/data/human_activity/Train')
@@ -144,20 +126,18 @@ def human_activity(num_tasks=30, global_data=False, train_set_size_per_user=-1, 
     task_index = np.concatenate((task_index_train, task_index_test)).squeeze()
     argsort = np.argsort(task_index)
     x = x[argsort]
-    y = y[argsort]
+    y = np.array(y[argsort])
+    y = y-1
+    y = tf.keras.utils.to_categorical(y, num_classes=12)
     task_index = task_index[argsort]
-    split_index = np.where(np.roll(task_index,1)!=task_index)[0][1:]
+    split_index = np.where(np.roll(task_index, 1) != task_index)[0][1:]
     x = np.split(x, split_index)
     y = np.split(y, split_index)
-    min_num_samples = min([y_i.shape for y_i in y])[0]
-    x = [x_i[:min_num_samples, :] for x_i in x]
-    y = [y_i[:min_num_samples] -1 for y_i in y]
-    y = [tf.keras.utils.to_categorical(y_i, num_classes=12) for y_i in y]
-    x, x_t, y, y_t = zip(*[train_test_split(x_i, y_i, test_size=0.25) for x_i, y_i in zip(x, y)])
-    return x, y, x_t, y_t
+
+    return data_processor(x, y, num_tasks, min_data_set_size_per_user, max_data_set_size_per_user, test_size)
 
 
-def vehicle_sensor(num_tasks=None, global_data=False, train_set_size_per_user=-1, test_set_size_per_user=-1):
+def vehicle_sensor(num_tasks=-1, min_data_set_size_per_user=None, max_data_set_size_per_user=None, test_size=None):
     import os
     import pandas as pd
     dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -173,7 +153,8 @@ def vehicle_sensor(num_tasks=None, global_data=False, train_set_size_per_user=-1
             x_tmp = []
             for file_name in file_names:
                 if 'feat' in file_name:
-                    dt_tmp = pd.read_csv(os.path.join(root, file_name),  sep=' ', skipinitialspace=True, header=None).values[:,:50]
+                    dt_tmp = pd.read_csv(os.path.join(root, file_name),  sep=' ',
+                                         skipinitialspace=True, header=None).values[:, :50]
                     x_tmp.append(dt_tmp)
             if len(x_tmp) == 2:
                 x_tmp = np.concatenate(x_tmp, axis=1)
@@ -191,12 +172,9 @@ def vehicle_sensor(num_tasks=None, global_data=False, train_set_size_per_user=-1
     split_index = np.where(np.roll(task_index, 1) != task_index)[0][1:]
     x = np.split(x, split_index)
     y = np.split(y, split_index)
-    min_num_samples = min([y_i.shape for y_i in y])[0]
-    x = [x_i[:min_num_samples, :] for x_i in x]
-    y = [y_i[:min_num_samples] for y_i in y]
-    y = [tf.keras.utils.to_categorical(y_i, num_classes=2) for y_i in y]
-    x, x_t, y, y_t = zip(*[train_test_split(x_i, y_i, test_size=0.25) for x_i, y_i in zip(x, y)])
-    return x, y, x_t, y_t
+    y = tf.keras.utils.to_categorical(y, num_classes=2)
+
+    return data_processor(x, y, num_tasks, min_data_set_size_per_user, max_data_set_size_per_user, test_size)
 
 
 def generate_gleam_data():
@@ -287,8 +265,7 @@ def generate_gleam_data():
     return x, y
 
 
-def gleam(num_tasks=None, global_data=False, train_set_size_per_user=-1, test_set_size_per_user=-1):
-    from sklearn.model_selection import train_test_split
+def gleam(num_tasks=-1, min_data_set_size_per_user=None, max_data_set_size_per_user=None, test_size=None):
     import os
     dir_path = os.path.dirname(os.path.realpath(__file__))
     dir_path = os.path.dirname(dir_path)
@@ -300,10 +277,6 @@ def gleam(num_tasks=None, global_data=False, train_set_size_per_user=-1, test_se
         x, y = generate_gleam_data()
 
     y = [np.array(y_i) for y_i in y]
-    min_num_samples = min([y_i.shape for y_i in y])[0]
-    x = [x_i[:min_num_samples, :] for x_i in x]
-    y = [y_i[:min_num_samples] for y_i in y]
     y = [tf.keras.utils.to_categorical(y_i, num_classes=2) for y_i in y]
-    x, x_t, y, y_t = zip(*[train_test_split(x_i, y_i, test_size=0.25) for x_i, y_i in zip(x, y)])
 
-    return x, y, x_t, y_t
+    return data_processor(x, y, num_tasks, min_data_set_size_per_user, max_data_set_size_per_user, test_size)

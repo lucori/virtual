@@ -27,8 +27,9 @@ def cfg():
     }
     data_set = {
         "num_tasks": 0,
-        "data_set_size_per_user": 0,
-        "test_set_size_per_user": 0,
+        "min_data_set_size_per_user": 0,
+        "max_data_set_size_per_user": None,
+        "test_size": 0,
         "generator": None
     }
     training = {
@@ -38,7 +39,8 @@ def cfg():
         "patience": 0,
         "learning_rate": 0,
         "validation_split": 0,
-        "verbose": 0
+        "verbose": 0,
+        "early_stopping": False
     }
     model = {
         "num_samples": 0,
@@ -47,8 +49,6 @@ def cfg():
         "layer_units": [],
         "activations": []
     }
-    data_set['train_set_size_per_user'] = int(data_set['data_set_size_per_user']*(1-training['validation_split']))
-    data_set['global_size'] = data_set['train_set_size_per_user']*data_set['num_tasks']
 
 
 @ex.capture
@@ -81,11 +81,13 @@ def run(session, data_set, training, model):
     for i in range(1, session['num_runs']+1):
         print('run: ', i, 'out of: ', session['num_runs'])
 
-        x, y, x_t, y_t = data_set['generator'](data_set['num_tasks'], global_data=False,
-                                               train_set_size_per_user=data_set['data_set_size_per_user'],
-                                               test_set_size_per_user=data_set['test_set_size_per_user'])
+        x, y, x_t, y_t = data_set['generator'](data_set['num_tasks'],
+                                               min_data_set_size_per_user=data_set['min_data_set_size_per_user'],
+                                               max_data_set_size_per_user=data_set['max_data_set_size_per_user'],
+                                               test_size=data_set['test_size'])
         data_set_size = [x_i.shape[0] for x_i in x]
         print(data_set_size)
+        data_set['num_tasks'] = len(data_set_size)
         network_m = NetworkManager(lambda dt_size: get_mlp_server(model['input_shape'], model['layer'],
                                                                   model['layer_units'], model['activations'],
                                                                   dt_size, model['num_samples']),
@@ -110,6 +112,11 @@ def run(session, data_set, training, model):
         history_virtual, evaluation_virtual = network_m.fit(**fit_args_virtual)
         print('virtual done')
 
+        tf.reset_default_graph()
+        if config:
+            sess = tf.Session(config=config)
+            tf.keras.backend.set_session(sess)
+
         history_local = {}
         evaluation_local = {}
         for n in range(data_set['num_tasks']):
@@ -118,7 +125,7 @@ def run(session, data_set, training, model):
                                                                       model['layer_units'], model['activations'],
                                                                       dt_size, model['num_samples']),
                                        data_set_size=data_set_size, n_samples=model['num_samples'],
-                                       num_clients=data_set['num_tasks'])
+                                       num_clients=data_set['num_tasks'], sess_config=config)
             network_m.compile(optimizer=tf.keras.optimizers.Adam(training['learning_rate']),
                               loss=tf.keras.losses.categorical_crossentropy,
                               metrics=[tf.keras.metrics.categorical_accuracy])
@@ -147,24 +154,29 @@ def run(session, data_set, training, model):
         x_t = np.concatenate(x_t)
         y_t = np.concatenate(y_t)
 
-        global_net = get_mlp_server(model['input_shape'], model['layer'], model['layer_units'],
-                           model['activations'], data_set['global_size'], model['num_samples'])
-        global_net.compile(optimizer=tf.keras.optimizers.Adam(training['learning_rate']),
+        network_m = NetworkManager(lambda dt_size: get_mlp_server(model['input_shape'], model['layer'],
+                                                                  model['layer_units'], model['activations'],
+                                                                  dt_size, model['num_samples']),
+                                   data_set_size=[sum(data_set_size)], n_samples=model['num_samples'],
+                                   num_clients=1, sess_config=config)
+        network_m.compile(optimizer=tf.keras.optimizers.Adam(training['learning_rate']),
                           loss=tf.keras.losses.categorical_crossentropy,
                           metrics=[tf.keras.metrics.categorical_accuracy])
-        print('starting global model')
-        fit_args_global = {'x': x,
-                           'y': y,
+        sequence = [0]
+        fit_args_global = {'sequence': sequence,
+                           'x': [x],
+                           'y': [y],
                            'validation_split': training['validation_split'],
-                           'validation_data': (x_t, y_t),
+                           'validation_data': [(x_t, y_t)],
                            'epochs': training['num_epochs'],
+                           'test_data': [(x_t, y_t)],
                            'batch_size': training['batch_size'],
                            'verbose': training['verbose']
                            }
         if training['early_stopping']:
             fit_args_global['callbacks'] = [early_stopping]
-        history_global = global_net.fit(**fit_args_global).history
-        evaluation_global = global_net.evaluate(x_t, y_t)
+        history_global, evaluation_global = network_m.fit(**fit_args_global)
+        print(evaluation_global)
 
         local_average = np.array(list(evaluation_local.values())).mean(axis=0)
         virtual_average = np.array(list(evaluation_virtual.values())).mean(axis=(0, 1))

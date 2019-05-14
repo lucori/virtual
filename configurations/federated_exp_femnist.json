@@ -3,12 +3,13 @@
         "num_gpus": 1,
         "gpus": null,
         "experiment_name": "federated_exp_femnist",
-        "num_runs": 1
+        "num_runs": 5
     },
     "data_set":{
         "num_tasks": 10,
-        "data_set_size_per_user": 250,
-        "test_set_size_per_user": -1,
+        "min_data_set_size_per_user": 300,
+        "max_data_set_size_per_user": null,
+        "test_size": 0.25,
         "generator": "femnist"
     },
     "training":{
@@ -18,7 +19,8 @@
       "patience": 100,
       "learning_rate": 0.001,
       "validation_split": 0.2,
-      "verbose": 1
+      "verbose": 1,
+      "early_stopping": false
     },
     "model":{
       "num_samples": 10,

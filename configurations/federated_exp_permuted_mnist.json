@@ -7,8 +7,9 @@
     },
     "data_set":{
         "num_tasks": 10,
-        "data_set_size_per_user": 60000,
-        "test_set_size_per_user": 10000,
+        "min_data_set_size_per_user": 60000,
+        "max_data_set_size_per_user": 60000,
+        "test_size": 0.25,
         "generator": "permuted_mnist"
     },
     "training":{
@@ -18,7 +19,8 @@
       "patience": 10,
       "learning_rate": 0.001,
       "validation_split": 0.16666,
-      "verbose": 1
+      "verbose": 1,
+      "early_stopping": false
     },
     "model":{
       "num_samples": 10,
