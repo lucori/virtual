@@ -5,7 +5,16 @@ import numpy as np
 import GPUtil
 from tensorflow_probability.python.layers import DenseReparameterization
 from server import Server
-import re
+from contextlib import contextmanager
+import time
+
+
+@contextmanager
+def timeit_context(name):
+    startTime = time.time()
+    yield
+    elapsedTime = time.time() - startTime
+    print('[{}] finished in {} ms'.format(name, int(elapsedTime * 1000)))
 
 
 def gpu_session(num_gpus=None, gpus=None):
@@ -13,8 +22,10 @@ def gpu_session(num_gpus=None, gpus=None):
         os.environ["CUDA_VISIBLE_DEVICES"] = gpus
     elif num_gpus:
         if num_gpus >0:
-            os.environ["CUDA_DEVICE_ORDER"]='PCI_BUS_ID'
+            os.environ["CUDA_DEVICE_ORDER"] = 'PCI_BUS_ID'
             os.environ["CUDA_VISIBLE_DEVICES"] = set_free_gpus(num_gpus)
+    else:
+        os.environ["CUDA_VISIBLE_DEVICES"] = ''
     num_gpus = len(os.environ["CUDA_VISIBLE_DEVICES"])
     gpus = os.environ["CUDA_VISIBLE_DEVICES"]
     print(os.environ["CUDA_VISIBLE_DEVICES"])
