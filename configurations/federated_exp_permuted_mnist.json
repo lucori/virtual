@@ -7,26 +7,29 @@
     },
     "data_set":{
         "num_tasks": 10,
-        "min_data_set_size_per_user": 60000,
-        "max_data_set_size_per_user": 60000,
+        "min_data_set_size_per_user": 6000,
+        "max_data_set_size_per_user": 6000,
         "test_size": 0.25,
         "generator": "permuted_mnist"
     },
     "training":{
       "num_epochs": 100,
       "batch_size": 256,
-      "num_refining": 2,
+      "num_refining": 3,
       "patience": 10,
+      "decay": 0,
       "learning_rate": 0.001,
       "validation_split": 0.16666,
       "verbose": 1,
+      "optimizer": "Adam",
       "early_stopping": false
     },
     "model":{
-      "num_samples": 10,
+      "num_samples": 20,
       "input_shape": [28,28,1],
       "layer": "DenseReparameterizationPriorUpdate",
       "layer_units": [100, 100, 10],
+      "dropout": [0.3,0.3,0.3],
       "activations": ["relu", "relu", "softmax"]
     }
 }

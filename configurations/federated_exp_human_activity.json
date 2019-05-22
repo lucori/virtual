@@ -3,7 +3,7 @@
         "num_gpus": 1,
         "gpus": null,
         "experiment_name": "federated_exp_human_activity",
-        "num_runs": 1
+        "num_runs": 2
     },
     "data_set":{
         "num_tasks": -1,
@@ -13,20 +13,22 @@
         "generator": "human_activity"
     },
     "training":{
-      "num_epochs": 100,
+      "num_epochs": 200,
       "batch_size": 16,
-      "num_refining": 2,
+      "num_refining": 3,
       "patience": 10,
       "learning_rate": 0.001,
       "validation_split": 0.1,
       "verbose": 1,
+      "optimizer": "Adam",
       "early_stopping": false
     },
     "model":{
-      "num_samples": 10,
+      "num_samples": 20,
       "input_shape": [561],
       "layer": "DenseReparameterizationPriorUpdate",
       "layer_units": [100, 100, 12],
+      "dropout": [0.3,0.3,0.3],
       "activations": ["relu", "relu", "softmax"]
     }
 }

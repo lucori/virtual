@@ -1,9 +1,9 @@
 import tensorflow as tf
 import os
 import tensorflow_probability as tfp
+from tensorflow_probability.python.layers import DenseFlipout, DenseReparameterization
 import numpy as np
 import GPUtil
-from tensorflow_probability.python.layers import DenseReparameterization
 from server import Server
 from contextlib import contextmanager
 import time
@@ -46,6 +46,18 @@ def set_free_gpus(num):
     return str(list_gpu)[1:-1]
 
 
+def new_session(sess=None, sess_config=None):
+    import gc
+    tf.reset_default_graph()
+    if sess:
+        sess.close()
+        del sess
+    gc.collect()
+    sess = tf.Session(config=sess_config)
+    tf.keras.backend.set_session(sess)
+    return sess
+
+
 def clone(layer, data_set_size=None, n_samples=None, **kwargs):
     config = layer.get_config()
     for key, value in kwargs.items():
@@ -53,8 +65,9 @@ def clone(layer, data_set_size=None, n_samples=None, **kwargs):
             config[key] = config[key] + value
         else:
             config[key] = value
-    if issubclass(layer.__class__, DenseReparameterization):
-        sub_config = dict((k, config[k]) for k in ('units', 'activation', 'name', 'activity_regularizer', 'trainable') if k in config)
+    if issubclass(layer.__class__, DenseReparameterization) or issubclass(layer.__class__, DenseFlipout):
+        sub_config = dict((k, config[k]) for k in ('units', 'activation', 'name', 'activity_regularizer', 'trainable')
+                          if k in config)
         keys_config = set(sub_config.keys())
         kwargs.pop('name', None)
         keys_kwargs = set(kwargs.keys())
@@ -71,11 +84,12 @@ def clone(layer, data_set_size=None, n_samples=None, **kwargs):
         return layer.__class__.from_config(config)
 
 
-def get_mlp_server(input_shape, layer, layer_units, activations, data_set_size, num_samples):
+def get_mlp_server(input_shape, layer, layer_units, activations, data_set_size, num_samples, dropout=None):
     server = Server(data_set_size=data_set_size, n_samples=num_samples)
     server.add(tf.keras.layers.InputLayer(input_shape=input_shape))
     server.add(tf.keras.layers.Flatten())
-    for i, (u, act) in enumerate(zip(layer_units, activations)):
+    for i, (u, act, d) in enumerate(zip(layer_units, activations, dropout)):
+        server.add(tf.keras.layers.Dropout(d))
         server.add(layer(u, activation=act, name='lateral' + str(i),
                          kernel_divergence_fn=
                          lambda q, p, _: tfp.distributions.kl_divergence(q, p)/(data_set_size*num_samples)))

@@ -3,7 +3,7 @@
         "num_gpus": 1,
         "gpus": null,
         "experiment_name": "federated_exp_gleam",
-        "num_runs": 1
+        "num_runs": 5
     },
     "data_set":{
         "num_tasks": -1,
@@ -15,18 +15,20 @@
     "training":{
       "num_epochs": 100,
       "batch_size": 16,
-      "num_refining": 2,
+      "num_refining": 3,
       "patience": 10,
       "learning_rate": 0.001,
       "validation_split": 0.1,
       "verbose": 1,
+      "optimizer": "Adam",
       "early_stopping": false
     },
     "model":{
-      "num_samples": 10,
+      "num_samples": 20,
       "input_shape": [180],
       "layer": "DenseReparameterizationPriorUpdate",
       "layer_units": [100, 100, 2],
+      "dropout": [0.3,0.3,0.3],
       "activations": ["relu", "relu", "softmax"]
     }
 }

@@ -14,19 +14,22 @@
     },
     "training":{
       "num_epochs": 200,
-      "batch_size": 32,
-      "num_refining": 2,
+      "batch_size": 64,
+      "num_refining": 3,
       "patience": 100,
+      "decay": 0,
       "learning_rate": 0.001,
       "validation_split": 0.2,
       "verbose": 1,
+      "optimizer": "Adam",
       "early_stopping": false
     },
     "model":{
-      "num_samples": 10,
+      "num_samples": 20,
       "input_shape": [784],
       "layer": "DenseReparameterizationPriorUpdate",
       "layer_units": [100, 100, 62],
+      "dropout": [0.3,0.3,0.3],
       "activations": ["relu", "relu", "softmax"]
     }
 }

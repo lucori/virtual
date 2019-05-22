@@ -3,9 +3,26 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 
 
+def import_data(data_set, run):
+    import os
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+    dir_path = os.path.dirname(dir_path)
+    dir_path = os.path.join(dir_path, 'data', data_set['generator'].__name__)
+    os.makedirs(dir_path, exist_ok=True)
+    file_name = os.path.join(dir_path, 'data' + str(run) + '.npy')
+    if os.path.isfile(file_name):
+        (x, y, x_t, y_t) = np.load(file_name)
+    else:
+        x, y, x_t, y_t = data_set['generator'](data_set['num_tasks'],
+                                               min_data_set_size_per_user=data_set['min_data_set_size_per_user'],
+                                               max_data_set_size_per_user=data_set['max_data_set_size_per_user'],
+                                               test_size=data_set['test_size'])
+        np.save(file_name, [x, y, x_t, y_t])
+    return list(x), list(y), list(x_t), list(y_t)
+
+
 def data_processor(x, y, num_tasks=-1, min_data_set_size_per_user=0, max_data_set_size_per_user=None,
                    test_size=0.25):
-
     x, y = zip(*[(x_i, y_i) for x_i, y_i in zip(x, y) if x_i.shape[0] >= min_data_set_size_per_user])
     if max_data_set_size_per_user:
         x = [x_i[:max_data_set_size_per_user] for x_i in x]
@@ -18,7 +35,7 @@ def data_processor(x, y, num_tasks=-1, min_data_set_size_per_user=0, max_data_se
 
 
 def mnist(num_tasks=1, global_data=False, min_data_set_size_per_user=None, max_data_set_size_per_user=None,
-          test_size=None):
+          test_size=0.25):
     (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
     x_train = x_train.astype('float32')
     x_test = x_test.astype('float32')
@@ -54,8 +71,8 @@ def permute(x):
 
 def permuted_mnist(num_tasks=10, min_data_set_size_per_user=None, max_data_set_size_per_user=None,
                    test_size=None):
-    x, y = mnist(global_data=True, test_size=None)
-    x, y = zip(*[(permute(x), y) for _ in range(num_tasks)])
+    x, y = mnist(num_tasks=num_tasks, global_data=False, test_size=None)
+    x, y = zip(*[(permute(x_i), y_i) for x_i, y_i in zip(x, y)])
 
     return data_processor(x, y, num_tasks, min_data_set_size_per_user, max_data_set_size_per_user, test_size)
 
@@ -164,6 +181,7 @@ def vehicle_sensor(num_tasks=-1, min_data_set_size_per_user=None, max_data_set_s
 
     x = np.concatenate(x)
     y = np.concatenate(y)
+    y = tf.keras.utils.to_categorical(y, num_classes=2)
     task_index = np.concatenate(task_index)
     argsort = np.argsort(task_index)
     x = x[argsort]
@@ -172,10 +190,7 @@ def vehicle_sensor(num_tasks=-1, min_data_set_size_per_user=None, max_data_set_s
     split_index = np.where(np.roll(task_index, 1) != task_index)[0][1:]
     x = np.split(x, split_index)
     y = np.split(y, split_index)
-    y = tf.keras.utils.to_categorical(y, num_classes=2)
-
     return data_processor(x, y, num_tasks, min_data_set_size_per_user, max_data_set_size_per_user, test_size)
-
 
 def generate_gleam_data():
     import os

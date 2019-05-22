@@ -1,6 +1,6 @@
 import tensorflow as tf
 from layers import Gate, LateralConnection
-from general_utils import clone, timeit_context
+from general_utils import clone, timeit_context, new_session
 from tensorflow.python.keras.engine.input_layer import InputLayer
 from client import Client
 from collections import defaultdict
@@ -10,7 +10,8 @@ from utils import softminus
 
 class NetworkManager:
 
-    def __init__(self, server_fn, data_set_size=None, n_samples=10, num_clients=None, sess_config=None):
+    def __init__(self, server_fn, data_set_size=None, n_samples=10, num_clients=None, sess_config=None, run_obj=None,
+                 method=None):
         self.server_fn = server_fn
         self.client = None
         self.optimizer = None
@@ -29,10 +30,14 @@ class NetworkManager:
         self.initialize_t()
         self.q = None
         self.sess_config = sess_config
+        self.run = run_obj
+        self.method = method
         tf.reset_default_graph()
-        if self.sess_config:
-            sess = tf.Session(config=self.sess_config)
-            tf.keras.backend.set_session(sess)
+        sess = tf.keras.backend.get_session()
+        sess. close()
+        del sess
+        self.sess = tf.Session(config=self.sess_config)
+        tf.keras.backend.set_session(self.sess)
 
     def compile(self, optimizer, **kwargs):
         self.optimizer = dict(tf.keras.optimizers.serialize(optimizer))
@@ -62,6 +67,7 @@ class NetworkManager:
             optimizer = tf.keras.optimizers.deserialize(dict(self.optimizer))
             print('compiling client')
             self.client.compile(optimizer, **self.compile_conf)
+            print([t.name for t in self.client.losses])
             print('client compiled')
             fit_config = {'x': x[i]}
             if y:
@@ -80,16 +86,18 @@ class NetworkManager:
                 eval = self.client.evaluate(*test_data[i])
                 evaluate[i].append(eval)
                 print(eval)
+                if self.run:
+                    self.run.log_scalar('accuracy_' + self.method + '_task_' + str(i+1), eval[-1])
             print('computing new t')
             with timeit_context('t and q'):
                 self.t[i] = self.server.get_t()
                 self.q = self.server.get_q()
             print('new t computed')
-            tf.reset_default_graph()
-            if self.sess_config:
-                sess = tf.Session(config=self.sess_config)
-                tf.keras.backend.set_session(sess)
+            self.sess = new_session(self.sess, self.sess_config)
 
+        tf.reset_default_graph()
+        self.sess.close()
+        del self.sess
         return history, evaluate
 
     def client_from_server(self, indx):

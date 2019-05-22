@@ -1,6 +1,6 @@
 import tensorflow as tf
 import numpy as np
-from tensorflow_probability.python import  distributions as tfd
+from tensorflow_probability.python import distributions as tfd
 
 
 def default_np_multivariate_normal_fn(dtype, shape, name, trainable, add_variable_fn):

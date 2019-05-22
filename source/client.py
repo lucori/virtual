@@ -32,3 +32,6 @@ class Client(tf.keras.Model):
         output = tf.keras.layers.Lambda(lambda q: tf.stack(q))(output)
         output = tf.keras.layers.Lambda(lambda q: tf.reduce_sum(q, axis=0))(output)
         return output
+
+    def summary(self, line_length=None, positions=None, print_fn=None):
+        self.model.summary(line_length, positions, print_fn)

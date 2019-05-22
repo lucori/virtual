@@ -3,30 +3,32 @@
         "num_gpus": 1,
         "gpus": null,
         "experiment_name": "federated_exp_vehicle_sensor",
-        "num_runs": 1
+        "num_runs": 5
     },
     "data_set":{
         "num_tasks": -1,
         "min_data_set_size_per_user": 0,
         "max_data_set_size_per_user": null,
-        "train_test_split": 0.25,
+        "test_size": 0.25,
         "generator": "vehicle_sensor"
     },
     "training":{
-      "num_epochs": 100,
+      "num_epochs": 200,
       "batch_size": 256,
-      "num_refining": 2,
+      "num_refining": 3,
       "patience": 10,
       "learning_rate": 0.001,
       "validation_split": 0.1,
       "verbose": 1,
+      "optimizer": "Adam",
       "early_stopping": false
     },
     "model":{
-      "num_samples": 10,
+      "num_samples": 20,
       "input_shape": [100],
       "layer": "DenseReparameterizationPriorUpdate",
       "layer_units": [100, 100, 2],
+      "dropout": [0.2,0.2,0.2],
       "activations": ["relu", "relu", "softmax"]
     }
 }
