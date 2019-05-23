@@ -79,7 +79,7 @@ def clone(layer, data_set_size=None, n_samples=None, **kwargs):
             else:
                 args[key] = sub_config[key]
         args['kernel_divergence_fn'] = lambda q, p, _: tfp.distributions.kl_divergence(q, p)/(data_set_size*n_samples)
-        return layer.__class__(**args)
+        return DenseReparameterization(**args)
     else:
         return layer.__class__.from_config(config)
 

@@ -1,7 +1,7 @@
 import tensorflow as tf
 from general_utils import gpu_session, get_mlp_server, aulc, new_session
 from data_utils import *
-from layers import DenseReparameterizationPriorUpdate, DenseFlipOutPriorUpdate
+from layers import DenseReparameterizationServer, DenseFlipOutPriorUpdate
 from sacred import Experiment
 from sacred.observers import FileStorageObserver
 from sacred.utils import apply_backspaces_and_linefeeds
@@ -38,6 +38,7 @@ def cfg():
         "patience": 0,
         "learning_rate": 0,
         "decay": 0,
+        "steps_per_epoch":None,
         "validation_split": 0,
         "verbose": 0,
         "optimizer": None,

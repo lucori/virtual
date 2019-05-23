@@ -46,15 +46,15 @@ class Gate(tf.keras.layers.Layer):
         return dict(list(base_config.items()) + list(config.items()))
 
 
-class DenseReparameterizationPriorUpdate(tfp.layers.DenseReparameterization):
+class DenseReparameterizationServer(tfp.layers.DenseReparameterization):
 
     def __init__(self, units,
                  activation=None,
                  activity_regularizer=None,
                  trainable=True,
-                 kernel_posterior_fn=tfp_layers_util.default_mean_field_normal_fn(),
+                 kernel_posterior_fn=renormalize_mean_field_normal_fn,
                  kernel_posterior_tensor_fn=(lambda d: d.sample()),
-                 kernel_prior_fn=default_np_multivariate_normal_fn,
+                 kernel_prior_fn=default_tensor_multivariate_normal_fn,
                  kernel_divergence_fn=(lambda q, p, ignore: tfd.kl_divergence(q, p)),
                  bias_posterior_fn=tfp_layers_util.default_mean_field_normal_fn(is_singular=True),
                  bias_posterior_tensor_fn=(lambda d: d.sample()),
@@ -63,7 +63,7 @@ class DenseReparameterizationPriorUpdate(tfp.layers.DenseReparameterization):
                  **kwargs
                  ):
 
-        super(DenseReparameterizationPriorUpdate, self).__init__(units,
+        super(DenseReparameterizationServer, self).__init__(units,
                                                                  activation=activation,
                                                                  activity_regularizer=activity_regularizer,
                                                                  trainable=trainable,
@@ -78,58 +78,72 @@ class DenseReparameterizationPriorUpdate(tfp.layers.DenseReparameterization):
                                                                  **kwargs)
 
     def build(self, input_shape):
-        super(DenseReparameterizationPriorUpdate, self).build(input_shape)
-        self.reparametrized = False
+        input_shape = tf.TensorShape(input_shape)
+        in_size = input_shape.with_rank_at_least(2)[-1].value
+        if in_size is None:
+            raise ValueError('The last dimension of the inputs to `Dense` '
+                             'should be defined. Found `None`.')
+        self._input_spec = tf.layers.InputSpec(min_ndim=2, axes={-1: in_size})
 
-    def update_divergence(self, size):
-        self.kernel_divergence_fn = lambda q, p, _: tfp.distributions.kl_divergence(q, p)/size
-
-    def update_prior(self, kernel_prior_fn):
-        input_shape = self.input_shape
-        in_size = input_shape[-1]
+        # If self.dtype is None, build weights using the default dtype.
         dtype = tf.as_dtype(self.dtype or tf.keras.backend.floatx())
-        self.kernel_prior = kernel_prior_fn(dtype, [in_size, self.units], 'kernel_prior',
-                                            self.trainable, self.add_variable)
-        if self.reparametrized:
-            self.reparametrize_posterior()
-        self.update_loss()
 
-    def update_loss(self):
-        self._losses = []
-        self._apply_divergence(self.kernel_divergence_fn,
-                               self.kernel_posterior,
-                               self.kernel_prior,
-                               self.kernel_posterior_tensor,
-                               name='divergence_kernel')
+        if self.kernel_prior_fn is None:
+            self.kernel_prior = None
+        else:
+            self.kernel_prior = self.kernel_prior_fn(
+                dtype, [in_size, self.units], 'kernel_prior',
+                self.trainable, self.add_variable)
+        self._built_kernel_divergence = False
 
-    def reparametrize_posterior(self):
-        prior_par = self.kernel_prior.parameters
-        self.prior_loc = prior_par['distribution'].parameters['loc']
-        self.prior_scale = prior_par['distribution'].parameters['scale']
-        self.kernel_posterior = self.compute_new_posterior()
-        self.update_loss()
-        self.reparametrized = True
+        self.kernel_posterior = self.kernel_posterior_fn(self.non_trainable_variables)(
+            dtype, [in_size, self.units], 'kernel_posterior',
+            self.trainable, self.add_variable)
 
-    def compute_new_posterior(self):
-        scale1 = (np.finfo(self.weights[1].dtype.as_numpy_dtype).eps +
-                  tf.nn.softplus(self.weights[1]))
-        scale = tf.math.sqrt(tf.math.reciprocal(tf.math.reciprocal(tf.math.square(scale1)) +
-                                                tf.math.reciprocal(tf.math.square(self.prior_scale))))
-        loc = tf.math.multiply(tf.math.square(scale), tf.math.multiply(tf.math.reciprocal(tf.math.square(scale1)),
-                                                                       self.weights[0]) +
-                               tf.math.multiply(tf.math.reciprocal(tf.math.square(self.prior_scale)), self.prior_loc))
-        dist = tfd.Normal(loc=loc, scale=scale)
-        batch_ndims = tf.size(input=dist.batch_shape_tensor())
-        return tfd.Independent(dist, reinterpreted_batch_ndims=batch_ndims)
+        if self.bias_posterior_fn is None:
+            self.bias_posterior = None
+        else:
+            self.bias_posterior = self.bias_posterior_fn(
+                dtype, [self.units], 'bias_posterior',
+                self.trainable, self.add_variable)
+
+        if self.bias_prior_fn is None:
+            self.bias_prior = None
+        else:
+            self.bias_prior = self.bias_prior_fn(
+                dtype, [self.units], 'bias_prior',
+                self.trainable, self.add_variable)
+        self._built_bias_divergence = False
+        self.data_set_size = tf.Variable(1, trainable=False)
+        self.built = True
+
+    def _apply_divergence(self, divergence_fn, posterior, prior,
+                          posterior_tensor, name):
+        if(divergence_fn is None or
+                posterior is None or
+                prior is None):
+            divergence = None
+            return
+        divergence = tf.identity(
+            divergence_fn(
+                posterior, prior, posterior_tensor),
+            name=name)
+        divergence = tf.math.divide(divergence, tf.cast(tf.identity(self.data_set_size), tf.float32))
+        self.add_loss(divergence)
+
+    def update_prior(self, new_prior_tensors):
+        tf.keras.backend.set_value(self.non_trainable_variables[0], new_prior_tensors[0])
+        tf.keras.backend.set_value(self.non_trainable_variables[1], new_prior_tensors[1])
 
     def get_weights(self):
-        weights = super(DenseReparameterizationPriorUpdate, self).get_weights()
-        if self.reparametrized:
-            weights[0], weights[1] = gaussian_prod_par(weights, [self.prior_loc, softminus(self.prior_scale)])
-        return weights
+        weights = super(DenseReparameterizationServer, self).get_weights()
+        return gaussian_prod_par(weights[2:], weights[:2])
 
     def get_t(self):
-        return super(DenseReparameterizationPriorUpdate, self).get_weights()
+        return super(DenseReparameterizationServer, self).get_weights()[2:]
+
+    def set_data_set_size(self, size):
+        tf.keras.backend.set_value(self.data_set_size, size)
 
 
 class LateralConnection(tf.keras.layers.Layer):

@@ -8,9 +8,9 @@ from collections import defaultdict
 
 def run_network_manager(sequence, x, y, test_data, config, data_set, model, training, _run, method,
                         validation_data=None):
-    network_m = NetworkManager(lambda dt_size: get_mlp_server(model['input_shape'], model['layer'],
-                                                              model['layer_units'], model['activations'],
-                                                              dt_size, model['num_samples'], model['dropout']),
+    network_m = NetworkManager(get_mlp_server(model['input_shape'], model['layer'],
+                                                          model['layer_units'], model['activations'],
+                                                          data_set['data_set_size'][0], model['num_samples'], model['dropout']),
                                data_set_size=data_set['data_set_size'], n_samples=model['num_samples'],
                                num_clients=data_set['num_tasks'], sess_config=config, run_obj=_run, method=method)
     network_m.compile(optimizer=training['optimizer'](training['learning_rate'], training['decay']),

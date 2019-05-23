@@ -10,10 +10,10 @@ from utils import softminus
 
 class NetworkManager:
 
-    def __init__(self, server_fn, data_set_size=None, n_samples=10, num_clients=None, sess_config=None, run_obj=None,
+    def __init__(self, server, data_set_size=None, n_samples=10, num_clients=None, sess_config=None, run_obj=None,
                  method=None):
-        self.server_fn = server_fn
-        self.client = None
+        self.server = server
+        self.clients = []
         self.optimizer = None
         self.compile_conf = {}
         self.data_set_size = data_set_size
@@ -24,7 +24,8 @@ class NetworkManager:
             self.num_clients = len(data_set_size)
         else:
             self.num_clients = None
-        self.create_server(0)
+        self.create_clients()
+        self.server.data_set_size= data_set_size
         self.server_variational_layer_names = [layer.name for layer in self.server.layers
                                                if '_client_' not in layer.name and len(layer.weights) > 1]
         self.initialize_t()
@@ -32,16 +33,12 @@ class NetworkManager:
         self.sess_config = sess_config
         self.run = run_obj
         self.method = method
-        tf.reset_default_graph()
-        sess = tf.keras.backend.get_session()
-        sess. close()
-        del sess
-        self.sess = tf.Session(config=self.sess_config)
-        tf.keras.backend.set_session(self.sess)
 
     def compile(self, optimizer, **kwargs):
         self.optimizer = dict(tf.keras.optimizers.serialize(optimizer))
         self.compile_conf = kwargs
+        optimizer = tf.keras.optimizers.deserialize(dict(self.optimizer))
+        [cl.compile(optimizer, **self.compile_conf) for cl in self.clients]
 
     def fit(self, sequence=None, **kwargs):
         x = kwargs.pop('x')
@@ -56,34 +53,36 @@ class NetworkManager:
             test_data = list(test_data)
         history = defaultdict(list)
         evaluate = defaultdict(list)
+        fit_config = []
+        for i in sequence:
+            fit_config.append({})
+            fit_config[i] = {'x': x[i]}
+            if y:
+                fit_config[i]['y'] = y[i]
+            if validation_data:
+                fit_config[i]['validation_data'] = validation_data[i]
+            #if steps_per_epoch:
+            #fit_config[i]['steps_per_epoch'] = None
+            #if validation_steps:
+            #fit_config[i]['validation_steps'] = None
+            fit_config[i].update(kwargs)
+
         for t, i in enumerate(sequence):
             print('step ', t+1, ' in sequence of lenght ', len(sequence), ' task ', i+1)
-            self.create_server(i)
-            self.client = self.client_from_server(i)
             print('updating prior')
             with timeit_context('prior update'):
-                self.server.update_prior(self.q, self.t[i])
+                self.server.update_prior(i, self.q, self.t[i])
             print('prior updated')
-            optimizer = tf.keras.optimizers.deserialize(dict(self.optimizer))
+            #optimizer = tf.keras.optimizers.deserialize(dict(self.optimizer))
             print('compiling client')
-            self.client.compile(optimizer, **self.compile_conf)
-            print([t.name for t in self.client.losses])
+            #self.clients[i].compile(optimizer, **self.compile_conf)
             print('client compiled')
-            fit_config = {'x': x[i]}
-            if y:
-                fit_config['y'] = y[i]
-            if validation_data:
-                fit_config['validation_data'] = validation_data[i]
-            if steps_per_epoch:
-                fit_config['steps_per_epoch'] = steps_per_epoch[i]
-            if validation_steps:
-                fit_config['validation_steps'] = validation_steps[i]
-            fit_config.update(kwargs)
+
             with timeit_context('fit'):
-                hist = self.client.fit(**fit_config)
+                hist = self.clients[i].fit(x[i], y[i], epochs=2)
             history[i].append(hist.history)
             if test_data:
-                eval = self.client.evaluate(*test_data[i])
+                eval = self.clients[i].evaluate(*test_data[i])
                 evaluate[i].append(eval)
                 print(eval)
                 if self.run:
@@ -93,11 +92,7 @@ class NetworkManager:
                 self.t[i] = self.server.get_t()
                 self.q = self.server.get_q()
             print('new t computed')
-            self.sess = new_session(self.sess, self.sess_config)
 
-        tf.reset_default_graph()
-        self.sess.close()
-        del self.sess
         return history, evaluate
 
     def client_from_server(self, indx):
@@ -115,8 +110,9 @@ class NetworkManager:
         client = Client(input_tensor, x, n_samples=self.n_samples)
         return client
 
-    def create_server(self, indx):
-        self.server = self.server_fn(self.data_set_size[indx])
+    def create_clients(self):
+        for i, _ in enumerate(self.data_set_size):
+            self.clients.append(self.client_from_server(i))
 
     def initialize_t(self):
         def standard_normal(layer):

@@ -1,6 +1,40 @@
 import tensorflow as tf
 import numpy as np
 from tensorflow_probability.python import distributions as tfd
+from tensorflow_probability.python.layers.util import default_loc_scale_fn
+import math
+
+def renormalize_mean_field_normal_fn(non_trainable_var):
+    loc_scale_fn = default_loc_scale_fn()
+
+    def _fn(dtype, shape, name, trainable, add_variable_fn):
+        loc1, scale1 = loc_scale_fn(dtype, shape, name, trainable, add_variable_fn)
+        if scale1 is None:
+            dist = tfd.Deterministic(loc=loc1)
+        else:
+            scale2 = (np.finfo(non_trainable_var[1].dtype.as_numpy_dtype).eps +
+                      tf.nn.softplus(non_trainable_var[1]))
+            scale = tf.math.sqrt(tf.math.reciprocal(tf.math.reciprocal(tf.math.square(scale1)) +
+                                                    tf.math.reciprocal(tf.math.square(scale2))))
+            loc = tf.math.multiply(tf.math.square(scale), tf.math.multiply(tf.math.reciprocal(tf.math.square(scale1)),
+                                                                           loc1) +
+                                   tf.math.multiply(tf.math.reciprocal(tf.math.square(non_trainable_var[1])),
+                                                    non_trainable_var[0]))
+            dist = tfd.Normal(loc=loc, scale=scale)
+        batch_ndims = tf.size(dist.batch_shape_tensor())
+        return tfd.Independent(dist, reinterpreted_batch_ndims=batch_ndims)
+    return _fn
+
+
+def default_tensor_multivariate_normal_fn(dtype, shape, name, trainable, add_variable_fn):
+    del trainable
+    loc_scale_fn = default_loc_scale_fn(loc_initializer=tf.keras.initializers.constant(0),
+                                        untransformed_scale_initializer=tf.keras.initializers.constant(
+                                            math.log(math.exp(1.) - 1.)))
+    loc, scale = loc_scale_fn(dtype, shape, name, False, add_variable_fn)
+    dist = tfd.Normal(loc=loc, scale=scale)
+    batch_ndims = tf.size(input=dist.batch_shape_tensor())
+    return tfd.Independent(dist, reinterpreted_batch_ndims=batch_ndims)
 
 
 def default_np_multivariate_normal_fn(dtype, shape, name, trainable, add_variable_fn):
