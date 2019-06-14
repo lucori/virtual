@@ -3,6 +3,19 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 
 
+def federated_dataset_from_list(x, y, num_epochs, batch_size):
+    dt = [tf.data.Dataset.from_tensor_slices(({"x": x_i,
+                                              "task": np.concatenate(
+                                                  [tf.keras.utils.to_categorical(i, num_classes=len(x)).reshape(1, -1)
+                                                   for _ in range(x_i.shape[0])], axis=0)},
+                                             y_i)
+                                             ).repeat(num_epochs).batch(batch_size)
+          for i, (x_i, y_i) in enumerate(zip(x, y))]
+    dataset = dt
+    #[dataset.concatenate(dti) for i, dti in enumerate(dt) if i > 0]
+    return dataset
+
+
 def import_data(data_set, run):
     import os
     dir_path = os.path.dirname(os.path.realpath(__file__))

@@ -35,3 +35,10 @@ class Client(tf.keras.Model):
 
     def summary(self, line_length=None, positions=None, print_fn=None):
         self.model.summary(line_length, positions, print_fn)
+
+
+def client_functional_api_test(model, n_samples):
+    output = [tf.keras.layers.Lambda(lambda q: model.call(q))(model.input) for _ in range(n_samples)]
+    output = tf.keras.layers.Lambda(lambda q: tf.stack(q))(output)
+    output = tf.keras.layers.Lambda(lambda q: tf.reduce_sum(q, axis=0))(output)
+    return tf.keras.Model(model.input, output)

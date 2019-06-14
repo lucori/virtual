@@ -86,7 +86,7 @@ def clone(layer, data_set_size=None, n_samples=None, **kwargs):
 
 def get_mlp_server(input_shape, layer, layer_units, activations, data_set_size, num_samples, dropout=None):
     server = Server(data_set_size=data_set_size, n_samples=num_samples)
-    server.add(tf.keras.layers.InputLayer(input_shape=input_shape))
+    server.add(tf.keras.layers.InputLayer(input_shape=input_shape, name='x'))
     server.add(tf.keras.layers.Flatten())
     for i, (u, act, d) in enumerate(zip(layer_units, activations, dropout)):
         server.add(tf.keras.layers.Dropout(d))

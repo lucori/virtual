@@ -6,13 +6,13 @@ import numpy as np
 from collections import defaultdict
 
 
-def run_network_manager(sequence, x, y, test_data, config, data_set, model, training, _run, method,
+def run_network_manager(sequence, x, y, test_data, data_set, model, training, _run, method,
                         validation_data=None):
     network_m = NetworkManager(get_mlp_server(model['input_shape'], model['layer'],
                                                           model['layer_units'], model['activations'],
                                                           data_set['data_set_size'][0], model['num_samples'], model['dropout']),
                                data_set_size=data_set['data_set_size'], n_samples=model['num_samples'],
-                               num_clients=data_set['num_tasks'], sess_config=config, run_obj=_run, method=method)
+                               num_clients=data_set['num_tasks'], run_obj=_run, method=method)
     network_m.compile(optimizer=training['optimizer'](training['learning_rate'], training['decay']),
                       loss=tf.keras.losses.categorical_crossentropy,
                       metrics=[tf.keras.metrics.categorical_accuracy])
@@ -32,10 +32,10 @@ def run_network_manager(sequence, x, y, test_data, config, data_set, model, trai
     return network_m.fit(**fit_args)
 
 
-def simulation(method, x, y, test_data, config, data_set, model, training, _run, validation_data=None):
+def simulation(method, x, y, test_data, data_set, model, training, _run, validation_data=None):
     if method == 'virtual':
         sequence = np.tile(range(data_set['num_tasks']), training['num_refining'])
-        return run_network_manager(sequence, x, y, test_data, config, data_set, model, training, _run,
+        return run_network_manager(sequence, x, y, test_data, data_set, model, training, _run,
                                    method, validation_data)
     if method == 'local':
         history_local = defaultdict(list)
@@ -43,7 +43,7 @@ def simulation(method, x, y, test_data, config, data_set, model, training, _run,
         for n in range(data_set['num_tasks']):
             print('local model number ', n + 1)
             sequence = [n]
-            hist, eval = run_network_manager(sequence, x, y, test_data, config, data_set, model,
+            hist, eval = run_network_manager(sequence, x, y, test_data, data_set, model,
                                              training, _run, method, validation_data)
             history_local[n].append(hist.values())
             evaluate_local[n].append(np.array(list(eval.values())).squeeze())
@@ -58,5 +58,5 @@ def simulation(method, x, y, test_data, config, data_set, model, training, _run,
         x_t = np.concatenate(x_t)
         y_t = np.concatenate(y_t)
         sequence = [0]
-        return run_network_manager(sequence, [x], [y], [(x_t, y_t)], config, data_set, model,
+        return run_network_manager(sequence, [x], [y], [(x_t, y_t)], data_set, model,
                                    training, _run, method, validation_data)

@@ -87,14 +87,14 @@ def run(session, data_set, training, model, _run):
         validation_data = list(zip(x_t, y_t))
         test_data = list(zip(x_t, y_t))
 
-        history_virtual, evaluation_virtual = simulation('virtual', x, y, test_data, config, data_set,
+        history_virtual, evaluation_virtual = simulation('virtual', x, y, test_data, data_set,
                                                          model, training, _run, validation_data)
         sess = new_session(sess_config=config)
 
-        history_local, evaluation_local = simulation('local', x, y, test_data, config, data_set, model,
+        history_local, evaluation_local = simulation('local', x, y, test_data, data_set, model,
                                                      training, _run, validation_data)
         sess = new_session(sess_config=config)
-        history_global, evaluation_global = simulation('global', x, y, test_data, config, data_set,
+        history_global, evaluation_global = simulation('global', x, y, test_data, data_set,
                                                        model, training, _run, validation_data)
         print(evaluation_global)
 
