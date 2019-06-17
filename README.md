@@ -1,6 +1,6 @@
 # VIRTUAL
 
-The VIRTUAL package implements a model to perform federated multitask learning with with variational NN. The model is described in details at https://www.overleaf.com/read/tbpckcjmkpbm.
+The VIRTUAL package implements a model to perform federated multitask learning with with variational NN. The model is described in details at https://arxiv.org/abs/1906.06268
 
 
 ## Getting Started
