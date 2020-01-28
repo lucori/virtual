@@ -5,25 +5,47 @@ import math
 from tensorflow_probability.python.layers import util as tfp_layers_util
 
 
-def compute_gaussian_ratio(loc1, scale1, loc2, scale2):
-    scale_ratio = tf.math.sqrt(tf.math.reciprocal(tf.math.reciprocal(tf.math.square(scale1)) -
-                                                  tf.math.reciprocal(tf.math.square(scale2))))
-    loc_ratio = tf.multiply(tf.math.square(scale_ratio),
-                            tf.math.multiply(loc1, tf.math.reciprocal(tf.math.square(scale1))) -
-                            tf.math.multiply(loc2, tf.math.reciprocal(tf.math.square(scale2))))
-    return loc_ratio, scale_ratio
+def precision_from_scale(scale):
+    return tf.math.reciprocal(tf.math.square(scale))
+
+
+def scale_prod_from_precision(p1, p2):
+    return tf.math.sqrt(tf.math.reciprocal(p1 + p2))
+
+
+def scale_ratio_from_precision(p1, p2):
+    return tf.math.sqrt(tf.math.reciprocal(p1 - p2))
+
+
+def loc_prod(loc1, loc2, p1, p2, scale_prod):
+    return tf.multiply(tf.math.square(scale_prod),
+                       tf.math.multiply(loc1, p1) +
+                       tf.math.multiply(loc2, p2))
+
+
+def loc_ratio(loc1, loc2, p1, p2, scale_ratio):
+    return tf.multiply(tf.math.square(scale_ratio),
+                       tf.math.multiply(loc1, p1) -
+                       tf.math.multiply(loc2, p2))
 
 
 def compute_gaussian_prod(loc1, scale1, loc2, scale2):
-    scale_prod = tf.math.sqrt(tf.math.reciprocal(tf.math.reciprocal(tf.math.square(scale1)) +
-                                                 tf.math.reciprocal(tf.math.square(scale2))))
-    loc_prod = tf.multiply(tf.math.square(scale_prod),
-                           tf.math.multiply(loc1, tf.math.reciprocal(tf.math.square(scale1))) +
-                           tf.math.multiply(loc2, tf.math.reciprocal(tf.math.square(scale2))))
-    return loc_prod, scale_prod
+    p1 = precision_from_scale(scale1)
+    p2 = precision_from_scale(scale2)
+    scale_prod = scale_prod_from_precision(p1, p2)
+    loc_p = loc_prod(loc1, loc2, p1, p2, scale_prod)
+    return loc_p, scale_prod
 
 
-def renormalize_mean_field_normal_fn(loc_ratio, scale_ratio):
+def compute_gaussian_ratio(loc1, scale1, loc2, scale2):
+    p1 = precision_from_scale(scale1)
+    p2 = precision_from_scale(scale2)
+    scale_ratio = scale_ratio_from_precision(p1, p2)
+    loc_r = loc_ratio(loc1, loc2, p1, p2, scale_ratio)
+    return loc_r, scale_ratio
+
+
+def renormalize_mean_field_normal_fn(loc_ratio, prec_ratio):
     loc_scale_fn = tensor_loc_scale_fn()
 
     def _fn(dtype, shape, name, trainable, add_variable_fn):
@@ -31,18 +53,7 @@ def renormalize_mean_field_normal_fn(loc_ratio, scale_ratio):
         if scale is None:
             dist = tfd.Deterministic(loc=loc)
         else:
-            def scale_reparametrization_fn(x):
-                return tf.math.sqrt(tf.math.reciprocal(tf.math.reciprocal(tf.math.square(x)) +
-                                                       tf.math.reciprocal(tf.math.square(scale_ratio))))
-
-            scale_reparametrized = tfp.util.DeferredTensor(scale, scale_reparametrization_fn)
-
-            def loc_reparametrization_fn(x):
-                return tf.multiply(tf.math.square(scale_reparametrized),
-                                   tf.math.multiply(x, tf.math.reciprocal(tf.math.square(scale))) +
-                                   tf.math.multiply(loc_ratio, tf.math.reciprocal(tf.math.square(scale_ratio))))
-
-            loc_reparametrized = tfp.util.DeferredTensor(loc, loc_reparametrization_fn)
+            loc_reparametrized, scale_reparametrized = reparametrize_loc_scale(loc, scale, loc_ratio, prec_ratio)
             dist = tfd.Normal(loc=loc_reparametrized, scale=scale_reparametrized)
 
         batch_ndims = tf.size(dist.batch_shape_tensor())
@@ -79,27 +90,29 @@ def tensor_loc_scale_fn(is_singular=False, loc_initializer=tf.random_normal_init
     return _fn
 
 
-def default_tensor_multivariate_normal_fn(loc_ratio, scale_ratio, num_clients):
+def reparametrize_loc_scale(loc, scale, loc_ratio, prec_ratio):
+    prec = tfp.util.DeferredTensor(scale, precision_from_scale)
+
+    def scale_reparametrization_fn(x):
+        return scale_prod_from_precision(x, prec_ratio)
+
+    scale_reparametrized = tfp.util.DeferredTensor(prec, scale_reparametrization_fn)
+
+    def loc_reparametrization_fn(x):
+        return loc_prod(x, loc_ratio, prec, prec_ratio, scale_reparametrized)
+
+    loc_reparametrized = tfp.util.DeferredTensor(loc, loc_reparametrization_fn)
+    return loc_reparametrized, scale_reparametrized
+
+
+def default_tensor_multivariate_normal_fn(loc_ratio, prec_ratio, num_clients):
     def _fn(dtype, shape, name, trainable, add_variable_fn):
         del trainable
         loc_scale_fn = tensor_loc_scale_fn(loc_initializer=tf.keras.initializers.constant(0.),
                                            untransformed_scale_initializer=
-                                           tf.keras.initializers.constant(math.sqrt(num_clients))
-                                           )
+                                           tf.keras.initializers.constant(math.sqrt(num_clients)))
         loc, scale = loc_scale_fn(dtype, shape, name, False, add_variable_fn)
-
-        def scale_reparametrization_fn(x):
-            return tf.math.sqrt(tf.math.reciprocal(tf.math.reciprocal(tf.math.square(x)) +
-                                                   tf.math.reciprocal(tf.math.square(scale_ratio))))
-
-        scale_reparametrized = tfp.util.DeferredTensor(scale, scale_reparametrization_fn)
-
-        def loc_reparametrization_fn(x):
-            return tf.multiply(tf.math.square(scale_reparametrized),
-                               tf.math.multiply(x, tf.math.reciprocal(tf.math.square(scale))) +
-                               tf.math.multiply(loc_ratio, tf.math.reciprocal(tf.math.square(scale_ratio))))
-
-        loc_reparametrized = tfp.util.DeferredTensor(loc, loc_reparametrization_fn)
+        loc_reparametrized, scale_reparametrized = reparametrize_loc_scale(loc, scale, loc_ratio, prec_ratio)
         dist = tfd.Normal(loc=loc_reparametrized, scale=scale_reparametrized)
         batch_ndims = tf.size(input=dist.batch_shape_tensor())
         return tfd.Independent(dist, reinterpreted_batch_ndims=batch_ndims)
@@ -162,22 +175,22 @@ class DenseReparameterizationShared(tfp.layers.DenseReparameterization):
                                                    trainable=False,
                                                    initializer=tf.keras.initializers.constant(math.sqrt(self.num_clients)))
         self.s_i_scale = tfp.util.DeferredTensor(s_i_untrasformed_scale, tfp.bijectors.Softplus())
+        s_prec = tfp.util.DeferredTensor(self.s_scale, precision_from_scale)
+        s_i_prec = tfp.util.DeferredTensor(self.s_i_scale, precision_from_scale)
 
         def scale_reparametrization_fn(x):
-            return tf.math.sqrt(tf.math.reciprocal(tf.math.reciprocal(tf.math.square(x)) +
-                                                   tf.math.reciprocal(tf.math.square(self.s_i_scale))))
+            return scale_ratio_from_precision(x, s_i_prec)
 
-        self.scale_ratio = tfp.util.DeferredTensor(self.s_scale, scale_reparametrization_fn)
+        scale_ratio = tfp.util.DeferredTensor(s_prec, scale_reparametrization_fn)
+        self.prec_ratio = tfp.util.DeferredTensor(scale_ratio, precision_from_scale)
 
         def loc_reparametrization_fn(x):
-            return tf.multiply(tf.math.square(self.scale_ratio),
-                               tf.math.multiply(x, tf.math.reciprocal(tf.math.square(self.s_scale))) +
-                               tf.math.multiply(self.s_i_loc, tf.math.reciprocal(tf.math.square(self.s_i_scale))))
+            return loc_ratio(x, self.s_i_loc, s_prec, s_i_prec, scale_ratio)
 
         self.loc_ratio = tfp.util.DeferredTensor(self.s_loc, loc_reparametrization_fn)
 
-        self.kernel_posterior_fn = self.kernel_posterior_fn(self.loc_ratio, self.scale_ratio)
-        self.kernel_prior_fn = self.kernel_prior_fn(self.loc_ratio, self.scale_ratio, self.num_clients)
+        self.kernel_posterior_fn = self.kernel_posterior_fn(self.loc_ratio, self.prec_ratio)
+        self.kernel_prior_fn = self.kernel_prior_fn(self.loc_ratio, self.prec_ratio, self.num_clients)
 
         # Must have a posterior kernel.
         self.kernel_posterior = self.kernel_posterior_fn(
@@ -219,6 +232,7 @@ class BayesianSGD(tf.keras.optimizers.Optimizer):
         self._set_hyper("decay", self._initial_decay)
 
     def apply_gradients(self, grads_and_vars, **kwargs):
+
         for i, (grad, var) in enumerate(grads_and_vars):
             if 's_loc' in var.name:
                 loc, scale = compute_gaussian_prod(var,

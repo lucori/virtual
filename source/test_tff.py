@@ -5,6 +5,7 @@ import collections
 from tff_utils import aggregate_virtual, build_virtual_process
 from tensorflow_probability.python.distributions import kullback_leibler as kl_lib
 from tfp_utils import DenseReparameterizationShared
+from utils import gpu_session
 
 
 emnist_train, emnist_test = tff.simulation.datasets.emnist.load_data()
@@ -13,7 +14,7 @@ example_dataset = emnist_train.create_tf_dataset_for_client(
 
 
 NUM_CLIENTS = 10
-NUM_EPOCHS = 5
+NUM_EPOCHS = 10
 BATCH_SIZE = 20
 SHUFFLE_BUFFER = 500
 TOT_TRAIN = 341873
@@ -76,6 +77,8 @@ MODEL_TYPE = tff.to_type(MODEL_SPEC)
 CLIENT_FLOAT_TYPE = tff.FederatedType(MODEL_TYPE, tff.CLIENTS)
 
 init_model = compile_keras_model(init_model, 0.2)
+
+#tff.framework.set_default_executor(tff.framework.create_local_executor())
 
 iterative_process = build_virtual_process(model_fn_var)
 state = iterative_process.initialize()

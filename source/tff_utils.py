@@ -6,48 +6,17 @@ from tensorflow_federated.python.common_libs import anonymous_tuple
 import functools
 from tensorflow_federated.python.common_libs.anonymous_tuple import map_structure, AnonymousTuple, flatten, \
     is_same_structure, pack_sequence_as, to_elements
-from tensorflow_federated.python.common_libs import py_typecheck
 from tensorflow_federated.python.learning.framework import optimizer_utils
-from tensorflow_federated.python.learning.federated_averaging import ClientFedAvg
 from tensorflow_federated.python import core as tff
 from tensorflow_federated.python.common_libs import anonymous_tuple
 from tensorflow_federated.python.common_libs import py_typecheck
 from tensorflow_federated.python.learning import model_utils
 from tensorflow_federated.python.tensorflow_libs import tensor_utils
 from tensorflow_federated.python.learning.framework.optimizer_utils import ServerState, build_stateless_mean, \
-    build_stateless_broadcaster, server_init, server_update_model
+    build_stateless_broadcaster, server_update_model
 from tfp_utils import compute_gaussian_ratio, BayesianSGD
 import tensorflow_probability as tfp
 import collections
-
-
-def flatten_names(structure):
-    if not isinstance(structure, AnonymousTuple):
-        return tf.nest.flatten(structure)
-    else:
-        result = []
-    for name, v in to_elements(structure):
-        result.append(tuple((flatten(v), name)))
-    return result
-
-
-def map_structure_custom(fn, *structure):
-    py_typecheck.check_callable(fn)
-    if not structure:
-        raise ValueError('Must provide at least one structure')
-
-    py_typecheck.check_type(structure[0], AnonymousTuple)
-    for i, other in enumerate(structure[1:]):
-        if not is_same_structure(structure[0], other):
-            raise TypeError('Structure at position {} is not the same '
-                            'structure'.format(i))
-
-    flat_structure = []
-    flat_structure.extend([flatten_names(s) for s in structure])
-    entries = zip(*flat_structure)
-    s = [fn(*tp, name) for ((tp, name), *_) in entries]
-
-    return pack_sequence_as(structure[0], s)
 
 
 def map_structure_cross_function(fn, *structure):
@@ -113,17 +82,8 @@ def map_structure_virtual(func, *structure, **kwargs):
         expand_composites=expand_composites)
 
 
-def virtual_delta(l1, l2, us1=None, us2=None):
-    if us1 is None and us2 is None:
-        return tf.subtract(l1, l2)
-    else:
-        s1 = tfp.bijectors.Softplus().forward(us1)
-        s2 = tfp.bijectors.Softplus().forward(us2)
-        loc_ratio, scale_ratio = compute_gaussian_ratio(l1, s1, l2, s2)
-        return loc_ratio, tfp.bijectors.Softplus().inverse(scale_ratio)
-
-
-def federated_reduce_with_multiple_func(value, tf_func_pointwise, tf_func_accumulate_merge, tf_func_report, zeros):
+def federated_reduce_with_multiple_func(value, tf_func_pointwise, tf_func_accumulate_merge, tf_func_report,
+                                        zeros):
     member_type = value.type_signature.member
 
     @tff.tf_computation(value.type_signature.member, value.type_signature.member)
@@ -168,13 +128,6 @@ def untrasformed_scale_to_inverse_variance(tensor):
         return tensor
 
 
-def inverse_variance_to_untransformed_scale(tensor):
-    if 'untransformed_scale' in tensor.name:
-        return compose(tfp.bijectors.Softplus().inverse, tf.math.sqrt, tf.math.reciprocal)(tensor)
-    else:
-        return tensor
-
-
 def precision_to_untransformed_scale(tensor):
     if 'Reciprocal' in tensor.name:
         return compose(tfp.bijectors.Softplus().inverse, tf.math.sqrt)(tensor)
@@ -189,8 +142,18 @@ def scale_reciprocal(tensor):
         return tensor
 
 
-def zeros_fn_add(value):
-    return 0.
+def zeros_fn_add(type):
+    return tf.constant(0., dtype=type.dtype)
+
+
+def virtual_delta(l1, l2, us1=None, us2=None):
+    if us1 is None and us2 is None:
+        return tf.subtract(l1, l2)
+    else:
+        s1 = tfp.bijectors.Softplus().forward(us1)
+        s2 = tfp.bijectors.Softplus().forward(us2)
+        loc_ratio, scale_ratio = compute_gaussian_ratio(l1, s1, l2, s2)
+        return loc_ratio, tfp.bijectors.Softplus().inverse(scale_ratio)
 
 
 def federated_virtual(value):
@@ -321,10 +284,31 @@ class ClientVirtual(optimizer_utils.ClientDeltaFn):
             }))
 
 
+def server_init_virtual(model_fn, optimizer_fn, delta_aggregate_state,
+                model_broadcast_state):
+    """Returns initial `tff.learning.framework.ServerState`.
+    Args:
+    model_fn: A no-arg function that returns a `tff.learning.Model`.
+    optimizer_fn: A no-arg function that returns a `tf.train.Optimizer`.
+    delta_aggregate_state: The initial state of the delta_aggregator.
+    model_broadcast_state: The initial state of the model_broadcaster.
+    Returns:
+    A `tff.learning.framework.ServerState` namedtuple.
+    """
+    model = model_utils.enhance(model_fn())
+    optimizer = optimizer_fn()
+    _, optimizer_vars = _build_server_optimizer_virtual(model, optimizer)
+    return ServerState(
+          model=model.weights,
+          optimizer_state=optimizer_vars,
+          delta_aggregate_state=delta_aggregate_state,
+          model_broadcast_state=model_broadcast_state)
+
+
 def build_model_delta_optimizer_process_virtual(model_fn,
                                                 model_to_client_delta_fn,
                                                 server_optimizer_fn,
-                                                stateful_delta_aggregate_fn=build_stateless_mean(),
+                                                stateful_delta_aggregate_fn=aggregate_virtual(),
                                                 stateful_model_broadcast_fn=build_stateless_broadcaster()):
 
     py_typecheck.check_callable(model_fn)
@@ -344,7 +328,7 @@ def build_model_delta_optimizer_process_virtual(model_fn,
 
         @tff.tf_computation
         def _fn():
-            return server_init(model_fn, server_optimizer_fn,
+            return server_init_virtual(model_fn, server_optimizer_fn,
                                stateful_delta_aggregate_fn.initialize(),
                                stateful_model_broadcast_fn.initialize())
 
