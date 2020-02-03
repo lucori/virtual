@@ -11,7 +11,7 @@ softplus = tfp.bijectors.Softplus()
 precision_from_untransformed_scale = tfp.bijectors.Chain([precision_from_scale, softplus])
 
 
-class DenseReparametrizationShared(tfp.layers.DenseFlipout):
+class DenseReparametrizationShared(tfp.layers.DenseReparameterization):
 
     def __init__(self, units,
                  activation=None,
