@@ -46,12 +46,12 @@ def renormalize_mean_field_normal_fn(loc_ratio, prec_ratio):
     return _fn
 
 
-def default_tensor_multivariate_normal_fn(loc_ratio, prec_ratio, num_clients):
+def default_tensor_multivariate_normal_fn(loc_ratio, prec_ratio, num_clients, prior_scale=1.):
     def _fn(dtype, shape, name, trainable, add_variable_fn):
         del trainable
         loc_scale_fn = tensor_loc_scale_fn(loc_initializer=tf.keras.initializers.constant(0.),
                                            untransformed_scale_initializer=tf.keras.initializers.constant(
-                                           tfp.bijectors.Softplus().inverse(math.sqrt(num_clients)).numpy()))
+                                           tfp.bijectors.Softplus().inverse(prior_scale*math.sqrt(num_clients)).numpy()))
         loc, scale = loc_scale_fn(dtype, shape, name, False, add_variable_fn)
         prec = tfp.util.DeferredTensor(scale, precision_from_scale)
         loc_reparametrized, scale_reparametrized = reparametrize_loc_scale(loc, prec, loc_ratio, prec_ratio)

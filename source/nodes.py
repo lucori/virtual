@@ -4,9 +4,10 @@ from dense_reparametrization_shared import DenseReparametrizationShared
 
 class Client(tf.keras.Sequential):
 
-    def __init__(self, layers=None, name=None):
+    def __init__(self, layers=None, name=None, num_samples=1):
         super(Client, self).__init__(layers=layers, name=name)
         self.s_i_to_update = False
+        self.num_samples = num_samples
 
     def compute_delta(self):
         '''return a list of delta, one delta (loc and scale tensors) per layer'''
@@ -39,6 +40,30 @@ class Client(tf.keras.Sequential):
         for layer in self.layers:
             if isinstance(layer, DenseReparametrizationShared):
                 layer.initialize_kernel_posterior()
+
+    def call(self, inputs, training=None, mask=None):
+        if self.num_samples > 1:
+            sampling = MultiSampleEstimator(self, self.num_samples)
+        else:
+            sampling = super(Client, self).call
+        output = sampling(inputs, training, mask)
+        return output
+
+
+class MultiSampleEstimator(tf.keras.layers.Layer):
+
+    def __init__(self, model, num_samples):
+        super(MultiSampleEstimator, self).__init__()
+        self.model = model
+        self.num_samples = num_samples
+
+    def call(self, inputs, training=None, mask=None):
+        output = []
+        for _ in range(self.num_samples):
+            output.append(super(Client, self.model).call(inputs, training, mask))
+        output = tf.stack(output)
+        output = tf.math.reduce_mean(output, axis=0)
+        return output
 
 
 class Server(tf.keras.Sequential):

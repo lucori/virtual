@@ -2,8 +2,7 @@ import tensorflow as tf
 import tensorflow_probability as tfp
 import math
 from tfp_utils import renormalize_mean_field_normal_fn, default_tensor_multivariate_normal_fn, precision_from_scale, \
-            compute_gaussian_ratio, compute_gaussian_prod, \
-            loc_ratio_from_precision
+            compute_gaussian_ratio, compute_gaussian_prod, loc_ratio_from_precision
 from tensorflow_probability.python import distributions as tfd
 from tensorflow_probability.python.layers import util as tfp_layers_util
 
@@ -12,12 +11,13 @@ softplus = tfp.bijectors.Softplus()
 precision_from_untransformed_scale = tfp.bijectors.Chain([precision_from_scale, softplus])
 
 
-class DenseReparametrizationShared(tfp.layers.DenseReparameterization):
+class DenseReparametrizationShared(tfp.layers.DenseFlipout):
 
     def __init__(self, units,
                  activation=None,
                  activity_regularizer=None,
                  num_clients=1,
+                 prior_scale=1.,
                  trainable=True,
                  kernel_posterior_fn=renormalize_mean_field_normal_fn,
                  kernel_posterior_tensor_fn=(lambda d: d.sample()),
@@ -31,19 +31,20 @@ class DenseReparametrizationShared(tfp.layers.DenseReparameterization):
                  ):
 
         super(DenseReparametrizationShared, self).__init__(units,
-                                                            activation=activation,
-                                                            activity_regularizer=activity_regularizer,
-                                                            trainable=trainable,
-                                                            kernel_posterior_fn=kernel_posterior_fn,
-                                                            kernel_posterior_tensor_fn=kernel_posterior_tensor_fn,
-                                                            kernel_prior_fn=kernel_prior_fn,
-                                                            kernel_divergence_fn=kernel_divergence_fn,
-                                                            bias_posterior_fn=bias_posterior_fn,
-                                                            bias_posterior_tensor_fn=bias_posterior_tensor_fn,
-                                                            bias_prior_fn=bias_prior_fn,
-                                                            bias_divergence_fn=bias_divergence_fn,
-                                                            **kwargs)
+                                                           activation=activation,
+                                                           activity_regularizer=activity_regularizer,
+                                                           trainable=trainable,
+                                                           kernel_posterior_fn=kernel_posterior_fn,
+                                                           kernel_posterior_tensor_fn=kernel_posterior_tensor_fn,
+                                                           kernel_prior_fn=kernel_prior_fn,
+                                                           kernel_divergence_fn=kernel_divergence_fn,
+                                                           bias_posterior_fn=bias_posterior_fn,
+                                                           bias_posterior_tensor_fn=bias_posterior_tensor_fn,
+                                                           bias_prior_fn=bias_prior_fn,
+                                                           bias_divergence_fn=bias_divergence_fn,
+                                                           **kwargs)
         self.num_clients = num_clients
+        self.prior_scale = prior_scale
 
     def build(self, input_shape):
         input_shape = tf.TensorShape(input_shape)
@@ -61,16 +62,16 @@ class DenseReparametrizationShared(tfp.layers.DenseReparameterization):
         scale_init = tf.random_normal_initializer(mean=+inf, stddev=0.1).__call__(shape=[in_size, self.units])
         scale_init = softplus.inverse(softplus.forward(scale_init)/math.sqrt(self.num_clients))
         s_untransformed_scale = self.add_variable(name='s_untransformed_scale', shape=[in_size, self.units], dtype=dtype,
-                                                 trainable=False,
-                                                 initializer=tf.keras.initializers.constant(scale_init.numpy()))
+                                                  trainable=False,
+                                                  initializer=tf.keras.initializers.constant(scale_init.numpy()))
         self.s_prec = tfp.util.DeferredTensor(s_untransformed_scale, precision_from_untransformed_scale)
 
         self.s_i_loc = self.add_variable(name='s_i_loc', shape=[in_size, self.units], dtype=dtype, trainable=False,
                                          initializer=tf.random_normal_initializer(stddev=0.1))
         s_i_untransformed_scale = self.add_variable(name='s_i_untransformed_scale', shape=[in_size, self.units],
-                                                   dtype=dtype,
-                                                   trainable=False,
-                                                   initializer=tf.random_normal_initializer(mean=+inf, stddev=0.1))
+                                                    dtype=dtype,
+                                                    trainable=False,
+                                                    initializer=tf.random_normal_initializer(mean=+inf, stddev=0.1))
         self.s_i_prec = tfp.util.DeferredTensor(s_i_untransformed_scale, precision_from_untransformed_scale)
         self.prec_ratio = tfp.util.DeferredTensor(self.s_prec, lambda x: x - self.s_i_prec)
 
@@ -79,7 +80,7 @@ class DenseReparametrizationShared(tfp.layers.DenseReparameterization):
 
         self.loc_ratio = tfp.util.DeferredTensor(self.s_loc, loc_reparametrization_fn)
         self.kernel_posterior_fn = self.kernel_posterior_fn(self.loc_ratio, self.prec_ratio)
-        self.kernel_prior_fn = self.kernel_prior_fn(self.loc_ratio, self.prec_ratio, self.num_clients)
+        self.kernel_prior_fn = self.kernel_prior_fn(self.loc_ratio, self.prec_ratio, self.num_clients, self.prior_scale)
 
         # Must have a posterior kernel.
         self.kernel_posterior = self.kernel_posterior_fn(
@@ -111,8 +112,8 @@ class DenseReparametrizationShared(tfp.layers.DenseReparameterization):
 
     def compute_delta(self):
         loc, precision = compute_gaussian_ratio(self.variables[0],
-                                                       precision_from_untransformed_scale.forward(self.variables[1]),
-                                                       self.s_i_loc, self.s_i_prec)
+                                                precision_from_untransformed_scale.forward(self.variables[1]),
+                                                self.s_i_loc, self.s_i_prec)
         tf.debugging.check_numerics(precision, 'compute_delta')
         tf.debugging.check_numerics(loc, 'compute_delta')
         return loc, precision

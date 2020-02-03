@@ -30,3 +30,11 @@ def set_free_gpus(num):
 
     list_gpu = GPUtil.getAvailable(limit=num, maxMemory=0.01)
     return str(list_gpu)[1:-1]
+
+
+def avg_dict(history_list, cards):
+    avg_dict = {}
+    keys = history_list[0].keys()
+    for key in keys:
+        avg_dict[key] = sum([history[key][-1]*card for history, card in zip(history_list, cards)])/sum(cards)
+    return avg_dict
