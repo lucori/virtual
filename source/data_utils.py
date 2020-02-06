@@ -47,12 +47,12 @@ def federated_dataset(name=None, num_clients=10):
         federated_test_data = [tf.data.Dataset.from_tensor_slices(data) for data in federated_test_data]
     if name == 'human_activity':
         x, y = human_activity_preprocess()
-        x, x_t, y, y_t = data_split(x, y)
+        x, y,x_t, y_t = data_split(x, y)
         federated_train_data = [tf.data.Dataset.from_tensor_slices(data) for data in zip(x, y)]
         federated_test_data = [tf.data.Dataset.from_tensor_slices(data) for data in zip(x_t, y_t)]
     if name == 'vehicle_sensor':
         x, y = vehicle_sensor_preprocess()
-        x, x_t, y, y_t = data_split(x, y)
+        x, y, x_t, y_t = data_split(x, y)
         federated_train_data = [tf.data.Dataset.from_tensor_slices(data) for data in zip(x, y)]
         federated_test_data = [tf.data.Dataset.from_tensor_slices(data) for data in zip(x_t, y_t)]
 

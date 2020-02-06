@@ -8,6 +8,8 @@ import datetime
 from virtual_process import VirtualFedProcess
 import random
 import math
+from fed_prox import FedProx
+from centered_l2_regularizer import DenseCentered, CenteredL2Regularizer
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 
@@ -22,6 +24,9 @@ def get_compiled_model_fn_from_dict(model_dict, training_dict, sample_batch):
             args['kernel_divergence_fn'] = kernel_divergence_fn
             args['num_clients'] = model_dict['num_clients']
             args['prior_scale'] = model_dict['prior_scale']
+        if layer == DenseCentered:
+            args['kernel_regularizer'] = lambda: CenteredL2Regularizer(model_dict['l2_reg'])
+            args['bias_regularizer'] = lambda: CenteredL2Regularizer(model_dict['l2_reg'])
         layers = []
         for i, (l_u, act) in enumerate(zip(model_dict['layer_units'], model_dict['activations'])):
             if i == 0:
@@ -52,12 +57,12 @@ def get_compiled_model_fn_from_dict(model_dict, training_dict, sample_batch):
     return model_fn
 
 
-def run_simulation(model_fn, federated_train_data, federated_test_data, model, training, logdir):
+def run_simulation(model_fn, federated_train_data, federated_test_data, train_size, test_size, model, training, logdir):
     if training['method'] == 'virtual':
         virtual_process = VirtualFedProcess(model_fn, model['num_clients'], damping_factor=training['damping_factor'],
                                                                             fed_avg_init=training['fed_avg_init'])
         virtual_process.fit(federated_train_data, training['num_rounds'], training['clients_per_round'],
-                            training['epochs_per_round'],
+                            training['epochs_per_round'], train_size=train_size, test_size=test_size,
                             federated_test_data=federated_test_data,
                             tensorboard_updates=training['tensorboard_updates'],
                             callbacks=training['callbacks'], logdir=logdir)
@@ -66,9 +71,9 @@ def run_simulation(model_fn, federated_train_data, federated_test_data, model, t
         train_summary_writer = tf.summary.create_file_writer(train_log_dir)
         test_summary_writer = tf.summary.create_file_writer(logdir)
 
+        tff.framework.set_default_executor(tff.framework.create_local_executor())
         iterative_process = tff.learning.build_federated_averaging_process(model_fn)
         evaluation = tff.learning.build_federated_evaluation(model_fn)
-
         state = iterative_process.initialize()
 
         for round_num in range(training['num_rounds']):
@@ -84,3 +89,11 @@ def run_simulation(model_fn, federated_train_data, federated_test_data, model, t
                 with test_summary_writer.as_default():
                     for name, value in test_metrics._asdict().items():
                         tf.summary.scalar(name, value, step=round_num)
+
+    elif training['method'] == 'fedprox':
+        fed_prox_process = FedProx(model_fn, model['num_clients'])
+        fed_prox_process.fit(federated_train_data, training['num_rounds'], training['clients_per_round'],
+                            training['epochs_per_round'], train_size=train_size, test_size=test_size,
+                            federated_test_data=federated_test_data,
+                            tensorboard_updates=training['tensorboard_updates'],
+                            logdir=logdir)

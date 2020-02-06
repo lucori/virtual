@@ -1,9 +1,10 @@
 import os
 import GPUtil
 import tensorflow as tf
-
+import numpy as np
 
 def gpu_session(num_gpus=None, gpus=None):
+    print(tf.config.experimental.list_physical_devices('GPU'))
     if gpus:
         os.environ["CUDA_VISIBLE_DEVICES"] = gpus
     elif num_gpus:
@@ -16,12 +17,10 @@ def gpu_session(num_gpus=None, gpus=None):
     gpus = os.environ["CUDA_VISIBLE_DEVICES"]
     print(os.environ["CUDA_VISIBLE_DEVICES"])
     if gpus or num_gpus > 0:
-        distribution = tf.distribute.MirroredStrategy()
-        config = tf.ConfigProto(allow_soft_placement=True)
-        config.gpu_options.allow_growth = True
-        return config, distribution
-    else:
-        return None, tf.distribute.MirroredStrategy()
+        print(gpus, tf.config.experimental.list_physical_devices('GPU'))
+        gpus = [tf.config.experimental.list_physical_devices('GPU')[int(gpu)] for gpu in gpus]
+        tf.config.experimental.set_visible_devices(gpus, 'GPU')
+        tf.config.set_soft_device_placement(True)
 
 
 def set_free_gpus(num):
@@ -34,10 +33,20 @@ def set_free_gpus(num):
 
 def avg_dict(history_list, cards):
     avg_dict = {}
-    keys = history_list[0].keys()
+    for el in history_list:
+        if hasattr(el, 'keys'):
+            keys = el.keys()
+            continue
     for key in keys:
-        avg_dict[key] = sum([history[key][-1]*card for history, card in zip(history_list, cards)])/sum(cards)
+        lists = list(zip(*[(history[key][-1]*card, card) for history, card in zip(history_list, cards) if history]))
+        avg_dict[key] = sum(lists[0])/sum(lists[1])
     return avg_dict
+
+
+def avg_dict_eval(eval_fed, cards):
+    avg_dict = {}
+    eval = np.array([np.array(eval)*card for eval, card in zip(eval_fed, cards)])
+    return eval.sum(axis=0)
 
 
 class KLWeightingScheduler(tf.keras.callbacks.Callback):

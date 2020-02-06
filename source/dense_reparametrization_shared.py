@@ -6,6 +6,7 @@ from tfp_utils import renormalize_mean_field_normal_fn, default_tensor_multivari
 from tensorflow_probability.python import distributions as tfd
 from tensorflow_probability.python.layers import util as tfp_layers_util
 
+
 inf = 1e15
 softplus = tfp.bijectors.Softplus()
 precision_from_untransformed_scale = tfp.bijectors.Chain([precision_from_scale, softplus])

@@ -24,21 +24,19 @@ class VirtualFedProcess:
         self.server = self.model_fn(Server, 1)
 
     def fit(self, federated_train_data, num_rounds, clients_per_round, epochs_per_round, federated_test_data=None,
-            tensorboard_updates=1, logdir='', callbacks=None):
+            tensorboard_updates=1, logdir='', callbacks=None, train_size=None, test_size=None):
 
         train_log_dir = logdir + '/train'
         self.train_summary_writer = tf.summary.create_file_writer(train_log_dir)
         self.test_summary_writer = tf.summary.create_file_writer(logdir)
 
-        cards_train = [tf.data.experimental.cardinality(data).numpy() for data in federated_train_data]
-        cards_test = [tf.data.experimental.cardinality(data).numpy() for data in federated_test_data]
+        self.build(train_size)
 
-        self.build(cards_train)
+        history_test = [None] * len(self.clients)
         for round in range(num_rounds):
 
             deltas = []
             history_train = []
-            history_test = []
 
             clients_sampled = random.sample(self.clients_indx, clients_per_round)
             for indx in clients_sampled:
@@ -52,16 +50,16 @@ class VirtualFedProcess:
                                                         epochs=epochs_per_round, callbacks=callbacks)
                 history_train.append({key: history_single.history[key] for key in history_single.history.keys()
                                       if 'val' not in key})
-                history_test.append({key.replace('val_', ''): history_single.history[key] for key in
-                                     history_single.history.keys() if 'val' in key})
+                history_test[indx] = {key.replace('val_', ''): history_single.history[key] for key in
+                                      history_single.history.keys() if 'val' in key}
                 self.clients[indx].apply_damping(self.damping_factor)
                 delta = self.clients[indx].compute_delta()
                 deltas.append(delta)
 
             aggregated_deltas = aggregate_deltas_multi_layer(deltas)
             self.server.apply_delta(aggregated_deltas)
-            avg_train = avg_dict(history_train, [cards_train[client] for client in clients_sampled])
-            avg_test = avg_dict(history_test, [cards_test[client] for client in clients_sampled])
+            avg_train = avg_dict(history_train, [train_size[client] for client in clients_sampled])
+            avg_test = avg_dict(history_test, test_size)
             print('round:', round, avg_train, avg_test)
             if round % tensorboard_updates == 0:
                 with self.train_summary_writer.as_default():
