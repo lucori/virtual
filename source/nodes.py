@@ -1,5 +1,6 @@
 import tensorflow as tf
 from dense_reparametrization_shared import DenseReparametrizationShared
+from centered_l2_regularizer import DenseCentered
 
 
 class Client(tf.keras.Sequential):
@@ -77,3 +78,31 @@ class Server(tf.keras.Sequential):
                 layer.apply_delta(delta[i])
 
 
+class ClientFedProx(tf.keras.Sequential):
+
+    def __init__(self, layers=None, name=None):
+        super(ClientFedProx, self).__init__(layers=layers, name=name)
+        self.old_weights = []
+
+    def compute_delta(self):
+        delta = []
+        for layer in self.layers:
+            if isinstance(layer, DenseCentered):
+                delta.append(layer.compute_delta())
+        return delta
+
+    def receive_and_save_weights(self, server):
+        for l_c, l_s in zip(self.layers, server.layers):
+            if isinstance(l_c, DenseCentered):
+                l_c.receive_and_save_weights(l_s)
+
+
+class ServerFedProx(tf.keras.Sequential):
+
+    def __init__(self, layers=None, name=None):
+        super(ServerFedProx, self).__init__(layers=layers, name=name)
+
+    def apply_delta(self, delta):
+        for i, layer in enumerate(x for x in self.layers if isinstance(x, DenseCentered)):
+            if isinstance(layer, DenseCentered):
+                layer.apply_delta(delta[i])
