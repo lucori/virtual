@@ -1,0 +1,29 @@
+{
+    "session":{
+        "num_gpus": 1
+    },
+    "data_set_conf":{
+        "name": "vehicle_sensor",
+        "num_clients": -1
+    },
+    "training_conf": {"method": "virtual",
+                     "num_rounds": 1000,
+                     "clients_per_round": 5,
+                     "optimizer": "adam",
+                     "fed_avg_init": false,
+                     "tensorboard_updates": 1,
+                     "damping_factor": 1.0,
+                     "kl_weight": 0.0001
+    },
+   "model_conf": {"input_shape": [100],
+              "layer": "DenseReparametrizationShared",
+              "layer_units": [100, 100, 2],
+              "activations": ["relu", "relu", "softmax"],
+              "hierarchical": false,
+              "prior_scale": 1.0
+   },
+   "hp": {"epochs_per_round": [1, 5],
+         "learning_rate": [0.0005, 0.001, 0.002, 0.005],
+         "batch_size": [10, 20]
+   }
+}

@@ -10,8 +10,8 @@ SEQ_LENGTH = 20
 BATCH_SIZE = 1
 
 
-def post_process_datasets(federated_data, batch_size, epochs=1):
-    return [data.repeat(epochs).shuffle(SHUFFLE_BUFFER).prefetch(BUFFER_SIZE).batch(batch_size)
+def post_process_datasets(federated_data, epochs=1):
+    return [data.repeat(epochs).shuffle(SHUFFLE_BUFFER).prefetch(BUFFER_SIZE)
             for data in federated_data]
 
 
@@ -158,17 +158,40 @@ def permuted_mnist(num_clients=100):
 def human_activity_preprocess():
     import os
     import pandas as pd
+    import zipfile
+    import requests
+
     dir_path = os.path.dirname(os.path.realpath(__file__))
     dir_path = os.path.dirname(dir_path)
-    dir_path_train = os.path.join(dir_path, 'data/human_activity/Train')
-    dir_path_test = os.path.join(dir_path, 'data/human_activity/Test')
+    dir_path = os.path.join(dir_path, 'data', 'human_activity')
 
-    x_train = pd.read_csv(os.path.join(dir_path_train, 'X_train.txt'), delimiter=' ', header=None).values
-    y_train = pd.read_csv(os.path.join(dir_path_train, 'y_train.txt'), delimiter=' ', header=None).values
-    task_index_train = pd.read_csv(os.path.join(dir_path_train, 'subject_id_train.txt'), delimiter=' ', header=None).values
-    x_test = pd.read_csv(os.path.join(dir_path_test, 'X_test.txt'), delimiter=' ', header=None).values
-    y_test = pd.read_csv(os.path.join(dir_path_test, 'y_test.txt'), delimiter=' ', header=None).values
-    task_index_test = pd.read_csv(os.path.join(dir_path_test, 'subject_id_test.txt'), delimiter=' ', header=None).values
+    if not os.listdir(dir_path):
+        url = 'https://archive.ics.uci.edu/ml/machine-learning-databases/00240/UCI%20HAR%20Dataset.zip'
+        file = requests.get(url)
+        zip_file = os.path.join(dir_path, 'original_data.zip')
+        open(zip_file, 'wb').write(file.content)
+
+        with zipfile.ZipFile(zip_file, 'r') as zip_ref:
+            zip_ref.extractall(dir_path)
+
+        os.remove(zip_file)
+
+    dir_path = os.path.join(dir_path, 'UCI HAR Dataset')
+    dir_path_train = os.path.join(dir_path, 'train')
+    dir_path_test = os.path.join(dir_path, 'test')
+
+    x_train = pd.read_csv(os.path.join(dir_path_train, 'X_train.txt'),
+                          delim_whitespace=True, header=None).values
+    y_train = pd.read_csv(os.path.join(dir_path_train, 'y_train.txt'),
+                          delim_whitespace=True, header=None).values
+    task_index_train = pd.read_csv(os.path.join(dir_path_train, 'subject_train.txt'),
+                                   delim_whitespace=True, header=None).values
+    x_test = pd.read_csv(os.path.join(dir_path_test, 'X_test.txt'),
+                         delim_whitespace=True, header=None).values
+    y_test = pd.read_csv(os.path.join(dir_path_test, 'y_test.txt'),
+                         delim_whitespace=True, header=None).values
+    task_index_test = pd.read_csv(os.path.join(dir_path_test, 'subject_test.txt'),
+                                  delim_whitespace=True, header=None).values
 
     x = np.concatenate((x_train, x_test))
     y = np.concatenate((y_train, y_test)).squeeze()
@@ -188,9 +211,24 @@ def human_activity_preprocess():
 def vehicle_sensor_preprocess():
     import os
     import pandas as pd
+    import zipfile
+    import requests
+
     dir_path = os.path.dirname(os.path.realpath(__file__))
     dir_path = os.path.dirname(dir_path)
     dir_path = os.path.join(dir_path, 'data/vehicle_sensor')
+
+    if not os.listdir(dir_path):
+        url = 'http://www.ecs.umass.edu/~mduarte/images/event.zip'
+        file = requests.get(url)
+        zip_file = os.path.join(dir_path, 'original_data.zip')
+        open(zip_file, 'wb').write(file.content)
+
+        with zipfile.ZipFile(zip_file, 'r') as zip_ref:
+            zip_ref.extractall(dir_path)
+
+        os.remove(zip_file)
+    dir_path = os.path.join(dir_path, 'events', 'runs')
 
     x = []
     y = []

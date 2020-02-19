@@ -1,0 +1,25 @@
+{
+    "session":{
+        "num_gpus": 1
+    },
+    "data_set_conf":{
+        "name": "mnist",
+        "num_clients": 100
+    },
+    "training_conf": {"method": "fedprox",
+                     "num_rounds": 2000,
+                     "clients_per_round": 5,
+                     "optimizer": "adam",
+                     "tensorboard_updates": 1
+                     },
+   "model_conf": {"input_shape": [784],
+              "layer": "DenseCentered",
+              "layer_units": [100, 100, 10],
+              "activations": ["relu", "relu", "softmax"]
+              },
+   "hp": {"epochs_per_round": [1, 5],
+         "learning_rate": [0.0005, 0.001, 0.002, 0.005],
+         "batch_size": [10, 20],
+         "l2_reg": [0.0, 0.0001, 0.01, 0.1, 1]
+   }
+}
