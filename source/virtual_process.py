@@ -3,6 +3,7 @@ from nodes import Client, Server
 from tfp_utils import aggregate_deltas_multi_layer
 import tensorflow as tf
 from utils import avg_dict
+from hierarchical_nodes import ClientModel, ServerModel
 
 
 class VirtualFedProcess:
@@ -17,20 +18,28 @@ class VirtualFedProcess:
         self.server = None
         self.fed_avg_init = fed_avg_init
 
-    def build(self, cards_train):
+    def build(self, cards_train, hierarchical):
+        print(hierarchical)
+        if hierarchical:
+            client_model_class = ClientModel
+            server_model_class = ServerModel
+        else:
+            client_model_class = Client
+            server_model_class = Server
+        print(client_model_class, server_model_class)
         for indx in self.clients_indx:
-            model = self.model_fn(Client, cards_train[indx])
+            model = self.model_fn(client_model_class, cards_train[indx])
             self.clients.append(model)
-        self.server = self.model_fn(Server, 1)
+        self.server = self.model_fn(server_model_class, 1)
 
     def fit(self, federated_train_data, num_rounds, clients_per_round, epochs_per_round, federated_test_data=None,
-            tensorboard_updates=1, logdir='', callbacks=None, train_size=None, test_size=None):
+            tensorboard_updates=1, logdir='', callbacks=None, train_size=None, test_size=None, hierarchical=False):
 
         train_log_dir = logdir + '/train'
         self.train_summary_writer = tf.summary.create_file_writer(train_log_dir)
         self.test_summary_writer = tf.summary.create_file_writer(logdir)
 
-        self.build(train_size)
+        self.build(train_size, hierarchical)
 
         history_test = [None] * len(self.clients)
         for round in range(num_rounds):
@@ -68,3 +77,6 @@ class VirtualFedProcess:
                 with self.test_summary_writer.as_default():
                     for key in avg_test.keys():
                         tf.summary.scalar(key, avg_test[key], step=round)
+
+        for i, client in enumerate(self.clients):
+            client.save_weights(logdir + '/weights_' + str(i) + '.h5')

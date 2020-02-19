@@ -3,6 +3,7 @@ import GPUtil
 import tensorflow as tf
 import numpy as np
 
+
 def gpu_session(num_gpus=None, gpus=None):
     print(tf.config.experimental.list_physical_devices('GPU'))
     if gpus:
@@ -21,6 +22,7 @@ def gpu_session(num_gpus=None, gpus=None):
         gpus = [tf.config.experimental.list_physical_devices('GPU')[int(gpu)] for gpu in gpus]
         tf.config.experimental.set_visible_devices(gpus, 'GPU')
         tf.config.set_soft_device_placement(True)
+        [tf.config.experimental.set_memory_growth(gpu, enable=True) for gpu in gpus]
 
 
 def set_free_gpus(num):

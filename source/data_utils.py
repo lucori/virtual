@@ -6,6 +6,8 @@ import tensorflow_federated as tff
 
 SHUFFLE_BUFFER = 500
 BUFFER_SIZE = 500
+SEQ_LENGTH = 20
+BATCH_SIZE = 1
 
 
 def post_process_datasets(federated_data, batch_size, epochs=1):
@@ -13,7 +15,7 @@ def post_process_datasets(federated_data, batch_size, epochs=1):
             for data in federated_data]
 
 
-def federated_dataset(name=None, num_clients=10):
+def federated_dataset(name=None, num_clients=100):
     if name == 'mnist':
         x_train, y_train, x_test, y_test = mnist_preprocess()
         x_train = np.split(x_train, num_clients)
@@ -40,6 +42,48 @@ def federated_dataset(name=None, num_clients=10):
         sample_clients = emnist_train.client_ids[0:num_clients]
         federated_train_data = make_federated_data(emnist_train, sample_clients)
         federated_test_data = make_federated_data(emnist_test, sample_clients)
+
+    if name == 'shakespeare':
+        vocab = list('dhlptx@DHLPTX $(,048cgkoswCGKOSW[_#\'/37;?bfjnrvzBFJNRVZ"&*.26:\naeimquyAEIMQUY]!%)-159\r')
+        table = tf.lookup.StaticHashTable(
+            tf.lookup.KeyValueTensorInitializer(
+                keys=vocab, values=tf.constant(list(range(len(vocab))),
+                                               dtype=tf.int64)),
+            default_value=0)
+
+        def to_ids(x):
+            s = tf.reshape(x['snippets'], shape=[1])
+            chars = tf.strings.bytes_split(s).values
+            ids = table.lookup(chars)
+            return ids
+
+        def split_input_target(chunk):
+            input_text = tf.map_fn(lambda x: x[:-1], chunk)
+            target_text = tf.map_fn(lambda x: x[1:], chunk)
+            return (input_text, target_text)
+
+        def preprocess(dataset, sequence_length, batch_size):
+            return (
+                # Map ASCII chars to int64 indexes using the vocab
+                dataset.map(to_ids)
+                    # Split into individual chars
+                    .unbatch()
+                    # Form example sequences of SEQ_LENGTH +1
+                    .batch(sequence_length + 1, drop_remainder=True)
+                    # Shuffle and form minibatches
+                    .shuffle(BUFFER_SIZE).batch(batch_size, drop_remainder=True)
+                    # And finally split into (input, target) tuples,
+                    # each of length SEQ_LENGTH.
+                    .map(split_input_target))
+
+        train_data, test_data = tff.simulation.datasets.shakespeare.load_data()
+
+        def data(client, source, sequence_length, batch_size):
+            return preprocess(source.create_tf_dataset_for_client(client), sequence_length, batch_size)
+
+        clients = train_data.client_ids[0:num_clients]
+        federated_train_data = [data(client, train_data, SEQ_LENGTH, BATCH_SIZE) for client in clients]
+        federated_test_data = [data(client, test_data, SEQ_LENGTH, BATCH_SIZE) for client in clients]
 
     if name == 'pmnist':
         federated_train_data, federated_test_data = permuted_mnist(num_clients=num_clients)
@@ -79,18 +123,17 @@ def mnist_preprocess():
 def permute(x):
 
     def shuffle(a, i):
-        shape = x[0].shape
         for j, _ in enumerate(a):
-            a[j] = (a[j].flatten()[i]).reshape(shape)
+            a[j] = (a[j].flatten()[i])
         return a
 
     if isinstance(x, list):
-        indx = np.random.permutation(x[0].size)
+        indx = np.random.permutation(x[0].shape[-1])
         permuted = []
         for el in x:
-            permuted.append(shuffle(x, indx))
+            permuted.append(shuffle(el, indx))
     else:
-        indx = np.random.permutation(x.size)
+        indx = np.random.permutation(x.shape[-1])
         permuted = shuffle(x, indx)
 
     return permuted
@@ -98,12 +141,17 @@ def permute(x):
 
 def permuted_mnist(num_clients=100):
     x_train, y_train, x_test, y_test = mnist_preprocess()
+    x_train = np.split(x_train, num_clients)
+    y_train = np.split(y_train, num_clients)
+    x_test = np.split(x_test, num_clients)
+    y_test = np.split(y_test, num_clients)
+
     federated_train = []
     federated_test = []
-    for _ in range(num_clients):
-        x_train, x_test = permute([x_train, x_test])
-        federated_train.append((x_train, y_train))
-        federated_test.append((x_test, y_test))
+    for x, xt, y, yt in zip(x_train, x_test, y_train, y_test):
+        x, xt = permute([x, xt])
+        federated_train.append((x, y))
+        federated_test.append((xt, yt))
     return federated_train, federated_test
 
 

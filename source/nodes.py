@@ -87,13 +87,13 @@ class ClientFedProx(tf.keras.Sequential):
     def compute_delta(self):
         delta = []
         for layer in self.layers:
-            if isinstance(layer, DenseCentered):
+            if hasattr(layer, 'compute_delta'):
                 delta.append(layer.compute_delta())
         return delta
 
     def receive_and_save_weights(self, server):
         for l_c, l_s in zip(self.layers, server.layers):
-            if isinstance(l_c, DenseCentered):
+            if hasattr(l_c, 'receive_and_save_weights'):
                 l_c.receive_and_save_weights(l_s)
 
 
@@ -103,6 +103,6 @@ class ServerFedProx(tf.keras.Sequential):
         super(ServerFedProx, self).__init__(layers=layers, name=name)
 
     def apply_delta(self, delta):
-        for i, layer in enumerate(x for x in self.layers if isinstance(x, DenseCentered)):
-            if isinstance(layer, DenseCentered):
+        for i, layer in enumerate(x for x in self.layers if hasattr(x, 'apply_delta')):
+            if hasattr(layer, 'apply_delta'):
                 layer.apply_delta(delta[i])

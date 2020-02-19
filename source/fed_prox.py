@@ -48,7 +48,7 @@ class FedProx:
             self.server.apply_delta(aggregated_deltas)
             test = [self.server.evaluate(test_data, verbose=0) for test_data in federated_test_data]
             avg_train = avg_dict(history_train, [train_size[client] for client in clients_sampled])
-            avg_test = avg_dict_eval(test, test_size/sum(test_size))
+            avg_test = avg_dict_eval(test, [size/sum(test_size) for size in test_size])
             print('round:', round, avg_train, avg_test)
             if round % tensorboard_updates == 0:
                 for i, key in enumerate(avg_train.keys()):
