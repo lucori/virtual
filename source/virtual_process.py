@@ -1,9 +1,8 @@
 import random
-from nodes import Client, Server
+from federated_devices import ClientVirtualSequential, ClientVirtualModel, ServerSequential, ServerModel
 from tfp_utils import aggregate_deltas_multi_layer
 import tensorflow as tf
 from utils import avg_dict
-from hierarchical_nodes import ClientModel, ServerModel
 
 
 class VirtualFedProcess:
@@ -19,14 +18,12 @@ class VirtualFedProcess:
         self.fed_avg_init = fed_avg_init
 
     def build(self, cards_train, hierarchical):
-        print(hierarchical)
         if hierarchical:
-            client_model_class = ClientModel
+            client_model_class = ClientVirtualModel
             server_model_class = ServerModel
         else:
-            client_model_class = Client
-            server_model_class = Server
-        print(client_model_class, server_model_class)
+            client_model_class = ClientVirtualSequential
+            server_model_class = ServerSequential
         for indx in self.clients_indx:
             model = self.model_fn(client_model_class, cards_train[indx])
             self.clients.append(model)
@@ -49,7 +46,7 @@ class VirtualFedProcess:
 
             clients_sampled = random.sample(self.clients_indx, clients_per_round)
             for indx in clients_sampled:
-                self.clients[indx].receive_s(self.server)
+                self.clients[indx].receive_and_save_weights(self.server)
                 self.clients[indx].renew_s_i()
                 if round > 0 and self.fed_avg_init:
                     self.clients[indx].initialize_kernel_posterior()
