@@ -115,26 +115,20 @@ class DenseReparametrizationShared(tfp.layers.DenseReparameterization):
         loc, precision = compute_gaussian_ratio(self.variables[0],
                                                 precision_from_untransformed_scale.forward(self.variables[1]),
                                                 self.s_i_loc, self.s_i_prec)
-        tf.debugging.check_numerics(precision, 'compute_delta')
-        tf.debugging.check_numerics(loc, 'compute_delta')
         return loc, precision
 
     def renew_s_i(self):
         self.s_i_loc.assign(self.variables[0])
         self.s_i_prec.variables[0].assign(self.variables[1])
-        self.check_numerics()
 
     def apply_delta(self, delta):
         loc, precision = compute_gaussian_prod(self.s_loc, self.s_prec, *delta)
         self.s_loc.assign(loc)
         self.s_prec.variables[0].assign(precision_from_untransformed_scale.inverse(precision))
 
-    def receive_s(self, layer_server):
-        tf.debugging.check_numerics(layer_server.variables[3], 's_loc')
-        tf.debugging.check_numerics(layer_server.variables[4], 's_scale')
+    def receive_and_save_weights(self, layer_server):
         self.s_loc.assign(layer_server.variables[3])
         self.s_prec.variables[0].assign(layer_server.variables[4])
-        self.check_numerics()
 
     def initialize_kernel_posterior(self):
         self.variables[0].assign(self.variables[3])
@@ -148,6 +142,3 @@ class DenseReparametrizationShared(tfp.layers.DenseReparameterization):
         self.variables[0].assign(loc)
         self.variables[1].assign(precision_from_untransformed_scale.inverse(prec))
 
-    def check_numerics(self):
-        tf.debugging.check_numerics(self.prec_ratio, 'precision_ratio')
-        tf.debugging.check_numerics(self.loc_ratio, 'loc_ratio')

@@ -3,9 +3,7 @@ from tensorflow.python.keras.engine.input_spec import InputSpec
 from tensorflow.python.framework import tensor_shape
 from tensorflow.python.framework import dtypes
 from tensorflow.python.keras import backend as K
-from tensorflow.python.keras import constraints
 from tensorflow.python.keras import initializers
-from tensorflow.python.keras import regularizers
 from tensorflow.python.keras.layers.recurrent import _caching_device
 from tensorflow.python.keras.utils import tf_utils
 from tensorflow.python.eager import context
@@ -47,7 +45,23 @@ class CenteredL2Regularizer(tf.keras.regularizers.Regularizer):
         return {'l2': float(self.l2), 'center': float(self.center.numpy())}
 
 
-class DenseCentered(tf.keras.layers.Dense):
+class LayerCentered(tf.keras.layers.Layer):
+
+    def receive_and_save_weights(self, layer):
+        for v_c, c_c, v_s in zip(self.trainable_variables, self.non_trainable_variables, layer.trainable_variables):
+            v_c.assign(v_s.numpy())
+            c_c.assign(v_s.numpy())
+
+    def compute_delta(self):
+        delta = [v - c for v, c in zip(self.trainable_variables, self.non_trainable_variables)]
+        return tuple(delta)
+
+    def apply_delta(self, delta):
+        for v, d in zip(self.trainable_variables, delta):
+            v.assign_add(d)
+
+
+class DenseCentered(tf.keras.layers.Dense, LayerCentered):
 
     def __init__(self,
                  units,
@@ -65,16 +79,16 @@ class DenseCentered(tf.keras.layers.Dense):
             kwargs['input_shape'] = (kwargs.pop('input_dim'),)
 
         super(DenseCentered, self).__init__(units,
-                 activation=activation,
-                 use_bias=use_bias,
-                 kernel_initializer=kernel_initializer,
-                 bias_initializer=bias_initializer,
-                 kernel_regularizer=None,
-                 bias_regularizer=None,
-                 activity_regularizer=activity_regularizer,
-                 kernel_constraint=kernel_constraint,
-                 bias_constraint=bias_constraint,
-                 **kwargs)
+                                            activation=activation,
+                                            use_bias=use_bias,
+                                            kernel_initializer=kernel_initializer,
+                                            bias_initializer=bias_initializer,
+                                            kernel_regularizer=None,
+                                            bias_regularizer=None,
+                                            activity_regularizer=activity_regularizer,
+                                            kernel_constraint=kernel_constraint,
+                                            bias_constraint=bias_constraint,
+                                            **kwargs)
 
         self.kernel_regularizer = kernel_regularizer()
         self.bias_regularizer = bias_regularizer()
@@ -96,47 +110,32 @@ class DenseCentered(tf.keras.layers.Dense):
                                                          initializer=tf.keras.initializers.constant(0.),
                                                          dtype=self.dtype,
                                                          trainable=False)
-        self.kernel = self.add_weight(
-            'kernel',
-            shape=[last_dim, self.units],
-            initializer=self.kernel_initializer,
-            regularizer=self.kernel_regularizer,
-            constraint=self.kernel_constraint,
-            dtype=self.dtype,
-            trainable=True)
+        self.kernel = self.add_weight('kernel',
+                                      shape=[last_dim, self.units],
+                                      initializer=self.kernel_initializer,
+                                      regularizer=self.kernel_regularizer,
+                                      constraint=self.kernel_constraint,
+                                      dtype=self.dtype,
+                                      trainable=True)
         if self.use_bias:
             self.bias_regularizer.center = self.add_weight('bias_center',
-                                                 shape=[self.units,],
-                                                 initializer=tf.keras.initializers.constant(0.),
-                                                 dtype=self.dtype,
-                                                 trainable=False)
-            self.bias = self.add_weight(
-              'bias',
-              shape=[self.units,],
-              initializer=self.bias_initializer,
-              regularizer=self.bias_regularizer,
-              constraint=self.bias_constraint,
-              dtype=self.dtype,
-              trainable=True)
+                                                           shape=[self.units, ],
+                                                           initializer=tf.keras.initializers.constant(0.),
+                                                           dtype=self.dtype,
+                                                           trainable=False)
+            self.bias = self.add_weight('bias',
+                                        shape=[self.units, ],
+                                        initializer=self.bias_initializer,
+                                        regularizer=self.bias_regularizer,
+                                        constraint=self.bias_constraint,
+                                        dtype=self.dtype,
+                                        trainable=True)
         else:
             self.bias = None
         self.built = True
 
-    def receive_and_save_weights(self, layer):
-        for v_c, c_c, v_s in zip(self.trainable_variables, self.non_trainable_variables, layer.trainable_variables):
-            v_c.assign(v_s.numpy())
-            c_c.assign(v_s.numpy())
 
-    def compute_delta(self):
-        delta = [v - c for v, c in zip(self.trainable_variables, self.non_trainable_variables)]
-        return tuple(delta)
-
-    def apply_delta(self, delta):
-        for v, d in zip(self.trainable_variables, delta):
-            v.assign_add(d)
-
-
-class LSTMCellCentered(tf.keras.layers.LSTMCell):
+class LSTMCellCentered(tf.keras.layers.LSTMCell, LayerCentered):
 
     def __init__(self,
                  units,
@@ -235,30 +234,9 @@ class LSTMCellCentered(tf.keras.layers.LSTMCell):
             self.bias = None
         self.built = True
 
-    def receive_and_save_weights(self, layer):
-        for v_c, c_c, v_s in zip(self.trainable_variables, self.non_trainable_variables, layer.trainable_variables):
-            v_c.assign(v_s.numpy())
-            c_c.assign(v_s.numpy())
 
-    def compute_delta(self):
-        delta = [v - c for v, c in zip(self.trainable_variables, self.non_trainable_variables)]
-        return tuple(delta)
-
-    def apply_delta(self, delta):
-        for v, d in zip(self.trainable_variables, delta):
-            v.assign_add(d)
-
-
-class RNNCentered(tf.keras.layers.RNN):
-
-    def receive_and_save_weights(self, layer):
-        self.cell.receive_and_save_weights(layer.cell)
-
-    def compute_delta(self):
-        return self.cell.compute_delta()
-
-    def apply_delta(self, delta):
-        self.cell.apply_delta(delta)
+class RNNCentered(tf.keras.layers.RNN, LayerCentered):
+    pass
 
 
 class EmbeddingCentered(tf.keras.layers.Embedding):
@@ -285,44 +263,20 @@ class EmbeddingCentered(tf.keras.layers.Embedding):
 
     @tf_utils.shape_type_conversion
     def build(self, input_shape):
+        def create_weights():
+            self.embeddings_regularizer.center = self.add_weight(shape=(self.input_dim, self.output_dim),
+                                                                 name='embeddings_center',
+                                                                 initializer=tf.keras.initializers.constant(0.),
+                                                                 dtype=self.dtype,
+                                                                 trainable=False),
+            self.embeddings = self.add_weight(shape=(self.input_dim, self.output_dim),
+                                              initializer=self.embeddings_initializer,
+                                              name='embeddings',
+                                              regularizer=self.embeddings_regularizer,
+                                              constraint=self.embeddings_constraint)
         if context.executing_eagerly() and context.context().num_gpus():
             with ops.device('cpu:0'):
-                self.embeddings_regularizer.center = self.add_weight(
-                    shape=(self.input_dim, self.output_dim),
-                    name='embeddings_center',
-                    initializer=tf.keras.initializers.constant(0.),
-                    dtype=self.dtype,
-                    trainable=False),
-                self.embeddings = self.add_weight(
-                    shape=(self.input_dim, self.output_dim),
-                    initializer=self.embeddings_initializer,
-                    name='embeddings',
-                    regularizer=self.embeddings_regularizer,
-                    constraint=self.embeddings_constraint)
+                create_weights()
         else:
-            self.embeddings_regularizer.center = self.add_weight(
-                shape=(self.input_dim, self.output_dim),
-                name='embeddings_center',
-                initializer=tf.keras.initializers.constant(0.),
-                dtype=self.dtype,
-                trainable=False),
-            self.embeddings = self.add_weight(
-              shape=(self.input_dim, self.output_dim),
-              initializer=self.embeddings_initializer,
-              name='embeddings',
-              regularizer=self.embeddings_regularizer,
-              constraint=self.embeddings_constraint)
+            create_weights()
         self.built = True
-
-    def receive_and_save_weights(self, layer):
-        for v_c, c_c, v_s in zip(self.trainable_variables, self.non_trainable_variables, layer.trainable_variables):
-            v_c.assign(v_s.numpy())
-            c_c.assign(v_s.numpy())
-
-    def compute_delta(self):
-        delta = [v - c for v, c in zip(self.trainable_variables, self.non_trainable_variables)]
-        return tuple(delta)
-
-    def apply_delta(self, delta):
-        for v, d in zip(self.trainable_variables, delta):
-            v.assign_add(d)
