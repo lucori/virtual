@@ -1,6 +1,5 @@
 import tensorflow as tf
 from dense_reparametrization_shared import DenseReparametrizationShared
-from centered_l2_regularizer import DenseCentered
 
 
 class Client(tf.keras.Sequential):
@@ -11,13 +10,30 @@ class Client(tf.keras.Sequential):
         self.num_samples = num_samples
 
     def compute_delta(self):
-        '''return a list of delta, one delta (loc and scale tensors) per layer'''
-
         delta = []
         for layer in self.layers:
-            if isinstance(layer, DenseReparametrizationShared):
+            if hasattr(layer, 'compute_delta'):
                 delta.append(layer.compute_delta())
         return delta
+
+    def receive_and_save_weights(self, server):
+        for l_c, l_s in zip(self.layers, server.layers):
+            if hasattr(l_c, 'receive_and_save_weights'):
+                l_c.receive_and_save_weights(l_s)
+
+
+class Server(tf.keras.Sequential):
+
+    def __init__(self, layers=None, name=None):
+        super(Server, self).__init__(layers=layers, name=name)
+
+    def apply_delta(self, delta):
+        for i, layer in enumerate(x for x in self.layers if hasattr(x, 'apply_delta')):
+            if hasattr(layer, 'apply_delta'):
+                layer.apply_delta(delta[i])
+
+
+class ClientVirtual(Client):
 
     def renew_s_i(self):
         if self.s_i_to_update:
@@ -26,11 +42,6 @@ class Client(tf.keras.Sequential):
                     layer.renew_s_i()
         else:
             self.s_i_to_update = True
-
-    def receive_s(self, server):
-        for lc, ls in zip(self.layers, server.layers):
-            if isinstance(lc, DenseReparametrizationShared) and isinstance(ls, DenseReparametrizationShared):
-                lc.receive_s(ls)
 
     def apply_damping(self, damping_factor):
         for layer in self.layers:
@@ -65,44 +76,3 @@ class MultiSampleEstimator(tf.keras.layers.Layer):
         output = tf.stack(output)
         output = tf.math.reduce_mean(output, axis=0)
         return output
-
-
-class Server(tf.keras.Sequential):
-
-    def __init__(self, layers=None, name=None):
-        super(Server, self).__init__(layers=layers, name=name)
-
-    def apply_delta(self, delta):
-        for i, layer in enumerate(x for x in self.layers if isinstance(x, DenseReparametrizationShared)):
-            if isinstance(layer, DenseReparametrizationShared):
-                layer.apply_delta(delta[i])
-
-
-class ClientFedProx(tf.keras.Sequential):
-
-    def __init__(self, layers=None, name=None):
-        super(ClientFedProx, self).__init__(layers=layers, name=name)
-        self.old_weights = []
-
-    def compute_delta(self):
-        delta = []
-        for layer in self.layers:
-            if hasattr(layer, 'compute_delta'):
-                delta.append(layer.compute_delta())
-        return delta
-
-    def receive_and_save_weights(self, server):
-        for l_c, l_s in zip(self.layers, server.layers):
-            if hasattr(l_c, 'receive_and_save_weights'):
-                l_c.receive_and_save_weights(l_s)
-
-
-class ServerFedProx(tf.keras.Sequential):
-
-    def __init__(self, layers=None, name=None):
-        super(ServerFedProx, self).__init__(layers=layers, name=name)
-
-    def apply_delta(self, delta):
-        for i, layer in enumerate(x for x in self.layers if hasattr(x, 'apply_delta')):
-            if hasattr(layer, 'apply_delta'):
-                layer.apply_delta(delta[i])
