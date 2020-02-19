@@ -1,6 +1,6 @@
 import random
-from nodes import Client, Server, ClientFedProx, ServerFedProx
-from centered_l2_regularizer import aggregate_deltas_multi_layer_avg
+from federated_devices import Client, Server
+from centered_layers import aggregate_deltas_multi_layer_avg
 import tensorflow as tf
 from utils import avg_dict, avg_dict_eval
 
@@ -17,8 +17,8 @@ class FedProx:
         self.build()
 
     def build(self):
-        self.client = self.model_fn(ClientFedProx, 1)
-        self.server = self.model_fn(ServerFedProx, 1)
+        self.client = self.model_fn(Client, 1)
+        self.server = self.model_fn(Server, 1)
 
     def fit(self, federated_train_data, num_rounds, clients_per_round, epochs_per_round, federated_test_data=None,
             tensorboard_updates=1, logdir='', callbacks=None, train_size=None, test_size=None):

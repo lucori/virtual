@@ -2,12 +2,7 @@ import tensorflow as tf
 from dense_reparametrization_shared import DenseReparametrizationShared
 
 
-class Client(tf.keras.Sequential):
-
-    def __init__(self, layers=None, name=None, num_samples=1):
-        super(Client, self).__init__(layers=layers, name=name)
-        self.s_i_to_update = False
-        self.num_samples = num_samples
+class _Client:
 
     def compute_delta(self):
         delta = []
@@ -22,10 +17,7 @@ class Client(tf.keras.Sequential):
                 l_c.receive_and_save_weights(l_s)
 
 
-class Server(tf.keras.Sequential):
-
-    def __init__(self, layers=None, name=None):
-        super(Server, self).__init__(layers=layers, name=name)
+class _Server:
 
     def apply_delta(self, delta):
         for i, layer in enumerate(x for x in self.layers if hasattr(x, 'apply_delta')):
@@ -33,7 +25,7 @@ class Server(tf.keras.Sequential):
                 layer.apply_delta(delta[i])
 
 
-class ClientVirtual(Client):
+class _ClientVirtual(_Client):
 
     def renew_s_i(self):
         if self.s_i_to_update:
@@ -57,9 +49,47 @@ class ClientVirtual(Client):
         if self.num_samples > 1:
             sampling = MultiSampleEstimator(self, self.num_samples)
         else:
-            sampling = super(Client, self).call
+            sampling = super(_ClientVirtual, self).call
         output = sampling(inputs, training, mask)
         return output
+
+
+class ClientSequential(tf.keras.Sequential, _Client):
+
+    def __init__(self, layers=None, name=None, num_samples=1):
+        super(ClientSequential, self).__init__(layers=layers, name=name)
+        self.s_i_to_update = False
+        self.num_samples = num_samples
+
+
+class ClientModel(tf.keras.Model, _Client):
+
+    def __init__(self, *args, **kwargs):
+        self.num_samples = kwargs.pop('num_samples', 1)
+        super(ClientModel, self).__init__(*args, **kwargs)
+        self.s_i_to_update = False
+
+
+class ServerSequential(tf.keras.Sequential, _Server):
+
+    def __init__(self, layers=None, name=None, num_samples=1):
+        super(ServerSequential, self).__init__(layers=layers, name=name)
+        self.num_samples = num_samples
+
+
+class ServerModel(tf.keras.Model, _Server):
+
+    def __init__(self, *args, **kwargs):
+        self.num_samples = kwargs.pop('num_samples', 1)
+        super(ServerModel, self).__init__(*args, **kwargs)
+
+
+class ClientVirtualSequential(ClientSequential, _ClientVirtual):
+    pass
+
+
+class ClientVirtualModel(ClientModel, _ClientVirtual):
+    pass
 
 
 class MultiSampleEstimator(tf.keras.layers.Layer):
@@ -72,7 +102,7 @@ class MultiSampleEstimator(tf.keras.layers.Layer):
     def call(self, inputs, training=None, mask=None):
         output = []
         for _ in range(self.num_samples):
-            output.append(super(Client, self.model).call(inputs, training, mask))
+            output.append(super(_ClientVirtual, self.model).call(inputs, training, mask))
         output = tf.stack(output)
         output = tf.math.reduce_mean(output, axis=0)
         return output
