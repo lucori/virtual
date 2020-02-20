@@ -46,6 +46,7 @@ class DenseReparametrizationShared(tfp.layers.DenseReparameterization):
                                                            **kwargs)
         self.num_clients = num_clients
         self.prior_scale = prior_scale
+        print(self.num_clients, self.prior_scale)
 
     def build(self, input_shape):
         input_shape = tf.TensorShape(input_shape)

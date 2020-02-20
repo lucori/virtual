@@ -5,7 +5,6 @@ import numpy as np
 
 
 def gpu_session(num_gpus=None, gpus=None):
-    print(tf.config.experimental.list_physical_devices('GPU'))
     if gpus:
         os.environ["CUDA_VISIBLE_DEVICES"] = gpus
     elif num_gpus:
@@ -46,7 +45,6 @@ def avg_dict(history_list, cards):
 
 
 def avg_dict_eval(eval_fed, cards):
-    avg_dict = {}
     eval = np.array([np.array(eval)*card for eval, card in zip(eval_fed, cards)])
     return eval.sum(axis=0)
 

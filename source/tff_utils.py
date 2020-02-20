@@ -71,7 +71,7 @@ def map_structure_virtual(func, *structure, **kwargs):
             ratio.extend(func(x[0],
                               structure[-1][x[0].name.rsplit('/')[0] + '/s_i_loc'],
                               entries[i+1][0],
-                              structure[-1][x[0].name.rsplit('/')[0] + '/s_i_untrasformed_scale']))
+                              structure[-1][x[0].name.rsplit('/')[0] + '/s_i_untransformed_scale']))
         elif 'kernel_posterior_untransformed_scale' in x[0].name:
             pass
         else:
@@ -200,7 +200,7 @@ def build_virtual_process(model_fn,
 
 
 def assign_to_client_virtual(a, b):
-    if 's_loc' in a.name or 's_untrasformed_scale' in a.name:
+    if 's_loc' in a.name or 's_untransformed_scale' in a.name:
         a.assign(b)
 
 
@@ -263,7 +263,7 @@ class ClientVirtual(optimizer_utils.ClientDeltaFn):
             if 'kernel_posterior_loc' in e:
                 model.weights.non_trainable[e.rsplit('/')[0] + '/s_i_loc'].assign(model.weights.trainable[e])
             if 'kernel_posterior_untransformed_scale' in e:
-                model.weights.non_trainable[e.rsplit('/')[0] + '/s_i_untrasformed_scale'].assign(model.weights.trainable[e])
+                model.weights.non_trainable[e.rsplit('/')[0] + '/s_i_untransformed_scale'].assign(model.weights.trainable[e])
 
 
         weights_delta, has_non_finite_delta = (
@@ -475,7 +475,7 @@ def _build_server_optimizer_virtual(model, optimizer):
             if 'kernel_posterior_loc' in e:
                 grads_and_vars.append((delta[e], model.weights.non_trainable[e.rsplit('/')[0] + '/s_loc']))
             if 'kernel_posterior_untransformed_scale' in e:
-                grads_and_vars.append((delta[e], model.weights.non_trainable[e.rsplit('/')[0] + '/s_untrasformed_scale']))
+                grads_and_vars.append((delta[e], model.weights.non_trainable[e.rsplit('/')[0] + '/s_untransformed_scale']))
 
         optimizer.apply_gradients(grads_and_vars, name='server_update')
         return tf.constant(1)  # We have to return something.

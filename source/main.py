@@ -37,7 +37,6 @@ federated_train_data, federated_test_data = federated_dataset(data_set_conf['nam
 train_size = [tf.data.experimental.cardinality(data).numpy() for data in federated_train_data]
 test_size = [tf.data.experimental.cardinality(data).numpy() for data in federated_test_data]
 
-
 federated_train_data = post_process_datasets(federated_train_data, 1)
 federated_test_data = post_process_datasets(federated_test_data)
 
@@ -48,7 +47,7 @@ HP_DICT = {}
 for key, values in hp_conf.items():
     HP_DICT[key] = hp.HParam(key,  hp.Discrete(values))
 
-logdir = 'logs/' + data_set_conf['name'] + '_' + training_conf['method'] + '_' + current_time
+logdir = os.path.join(dir_path, '../logs', data_set_conf['name'] + '_' + training_conf['method'] + '_' + current_time)
 
 with tf.summary.create_file_writer(logdir).as_default():
     hp.hparams_config(hparams=HP_DICT.values(),
@@ -62,11 +61,12 @@ experiments = [dict(zip(keys, v)) for v in product(*values)]
 for session_num, exp in enumerate(experiments):
 
     all_params = {**training_conf, **model_conf, **exp}
+    print(all_params)
     federated_train_data_batched = [data.batch(all_params['batch_size']) for data in federated_train_data]
     federated_test_data_batched = [data.batch(all_params['batch_size']) for data in federated_test_data]
 
     sample_batch = tf.nest.map_structure(
-        lambda x: x.numpy(), iter(federated_train_data_batched[0]).next())
+        lambda x: x.numpy(), iter(federated_train_data_batched[1]).next())
 
     hparams = dict([(HP_DICT[key], value) for key, value in exp.items()])
 
