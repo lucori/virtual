@@ -155,11 +155,25 @@ def permuted_mnist(num_clients=100):
     return federated_train, federated_test
 
 
+def download_file(url, filename):
+    import requests
+    from tqdm import tqdm
+
+    r = requests.get(url, stream=True)
+    total_size = int(r.headers.get('content-length', 0))
+    block_size = 1024  # 1 Kibibyte
+    t = tqdm(total=total_size, unit='iB', unit_scale=True)
+    with open(filename, 'wb') as f:
+        for data in r.iter_content(block_size):
+            t.update(len(data))
+            f.write(data)
+    t.close()
+
+
 def human_activity_preprocess():
     import os
     import pandas as pd
     import zipfile
-    import requests
 
     dir_path = os.path.dirname(os.path.realpath(__file__))
     dir_path = os.path.dirname(dir_path)
@@ -167,9 +181,8 @@ def human_activity_preprocess():
 
     if not os.listdir(dir_path):
         url = 'https://archive.ics.uci.edu/ml/machine-learning-databases/00240/UCI%20HAR%20Dataset.zip'
-        file = requests.get(url)
         zip_file = os.path.join(dir_path, 'original_data.zip')
-        open(zip_file, 'wb').write(file.content)
+        download_file(url, zip_file)
 
         with zipfile.ZipFile(zip_file, 'r') as zip_ref:
             zip_ref.extractall(dir_path)
@@ -212,7 +225,6 @@ def vehicle_sensor_preprocess():
     import os
     import pandas as pd
     import zipfile
-    import requests
 
     dir_path = os.path.dirname(os.path.realpath(__file__))
     dir_path = os.path.dirname(dir_path)
@@ -220,9 +232,8 @@ def vehicle_sensor_preprocess():
 
     if not os.listdir(dir_path):
         url = 'http://www.ecs.umass.edu/~mduarte/images/event.zip'
-        file = requests.get(url)
         zip_file = os.path.join(dir_path, 'original_data.zip')
-        open(zip_file, 'wb').write(file.content)
+        download_file(url, zip_file)
 
         with zipfile.ZipFile(zip_file, 'r') as zip_ref:
             zip_ref.extractall(dir_path)
