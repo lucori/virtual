@@ -61,7 +61,7 @@ experiments = [dict(zip(keys, v)) for v in product(*values)]
 for session_num, exp in enumerate(experiments):
 
     all_params = {**training_conf, **model_conf, **exp}
-    print(all_params)
+
     federated_train_data_batched = [data.batch(all_params['batch_size']) for data in federated_train_data]
     federated_test_data_batched = [data.batch(all_params['batch_size']) for data in federated_test_data]
 
@@ -70,7 +70,6 @@ for session_num, exp in enumerate(experiments):
 
     hparams = dict([(HP_DICT[key], value) for key, value in exp.items()])
 
-    print(hparams)
     logdir_run = logdir + '/' + str(session_num)
     with tf.summary.create_file_writer(logdir_run).as_default():
         hp.hparams(hparams)

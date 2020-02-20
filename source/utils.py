@@ -47,14 +47,3 @@ def avg_dict(history_list, cards):
 def avg_dict_eval(eval_fed, cards):
     eval = np.array([np.array(eval)*card for eval, card in zip(eval_fed, cards)])
     return eval.sum(axis=0)
-
-
-class KLWeightingScheduler(tf.keras.callbacks.Callback):
-
-    def __init__(self, initial_value):
-        super(KLWeightingScheduler, self).__init__()
-        self.kl_weight = tf.Variable(initial_value, trainable=False)
-
-    def on_epoch_begin(self, epoch, logs=None):
-        #self.kl_weight.assign((epoch/self.num_epochs)**100)
-        pass
