@@ -239,7 +239,7 @@ class RNNCentered(tf.keras.layers.RNN, LayerCentered):
     pass
 
 
-class EmbeddingCentered(tf.keras.layers.Embedding):
+class EmbeddingCentered(tf.keras.layers.Embedding, LayerCentered):
 
     def __init__(self,
                  input_dim,
