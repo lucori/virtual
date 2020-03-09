@@ -1,5 +1,4 @@
 import tensorflow as tf
-from dense_reparametrization_shared import DenseReparametrizationShared
 
 
 class _Client:
@@ -30,19 +29,19 @@ class _ClientVirtual(_Client):
     def renew_s_i(self):
         if self.s_i_to_update:
             for layer in self.layers:
-                if isinstance(layer, DenseReparametrizationShared):
+                if hasattr(layer, 'renew_s_i'):
                     layer.renew_s_i()
         else:
             self.s_i_to_update = True
 
     def apply_damping(self, damping_factor):
         for layer in self.layers:
-            if isinstance(layer, DenseReparametrizationShared):
+            if hasattr(layer, 'damping_factor'):
                 layer.apply_damping(damping_factor)
 
     def initialize_kernel_posterior(self):
         for layer in self.layers:
-            if isinstance(layer, DenseReparametrizationShared):
+            if hasattr(layer, 'initialize_kernel_posterior'):
                 layer.initialize_kernel_posterior()
 
     def call(self, inputs, training=None, mask=None):

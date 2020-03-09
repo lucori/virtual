@@ -30,11 +30,15 @@ def compute_gaussian_ratio(loc1, p1, loc2, p2):
 
 
 def renormalize_mean_field_normal_fn(loc_ratio, prec_ratio):
-    loc_scale_fn = tensor_loc_scale_fn()
 
-    def _fn(dtype, shape, name, trainable, add_variable_fn):
+    def _fn(dtype, shape, name, trainable, add_variable_fn, initializer=tf.random_normal_initializer(stddev=0.1),
+            regularizer=None, constraint=None, **kwargs):
+        loc_scale_fn = tensor_loc_scale_fn(loc_initializer=initializer,
+                                           loc_regularizer=regularizer,
+                                           loc_constraint=constraint, **kwargs)
+
         loc, scale = loc_scale_fn(dtype, shape, name, trainable, add_variable_fn)
-        prec = tfp.util.DeferredTensor(scale, precision_from_scale)
+        prec = tfp.util.DeferredTensor(scale, precision_from_scale, name='precision')
         if scale is None:
             dist = tfd.Deterministic(loc=loc)
         else:
@@ -47,11 +51,15 @@ def renormalize_mean_field_normal_fn(loc_ratio, prec_ratio):
 
 
 def default_tensor_multivariate_normal_fn(loc_ratio, prec_ratio, num_clients, prior_scale=1.):
-    def _fn(dtype, shape, name, trainable, add_variable_fn):
+    def _fn(dtype, shape, name, trainable, add_variable_fn, initializer=tf.keras.initializers.constant(0.),
+            regularizer=None, constraint=None, **kwargs):
         del trainable
-        loc_scale_fn = tensor_loc_scale_fn(loc_initializer=tf.keras.initializers.constant(0.),
+        loc_scale_fn = tensor_loc_scale_fn(loc_initializer=initializer,
+                                           loc_regularizer=regularizer,
+                                           loc_constraint=constraint,
                                            untransformed_scale_initializer=tf.keras.initializers.constant(
-                                           tfp.bijectors.Softplus().inverse(prior_scale*math.sqrt(num_clients)).numpy()))
+                                           tfp.bijectors.Softplus().inverse(prior_scale*math.sqrt(num_clients)).numpy()),
+                                           **kwargs)
         loc, scale = loc_scale_fn(dtype, shape, name, False, add_variable_fn)
         prec = tfp.util.DeferredTensor(scale, precision_from_scale)
         loc_reparametrized, scale_reparametrized = reparametrize_loc_scale(loc, prec, loc_ratio, prec_ratio)
@@ -64,7 +72,7 @@ def default_tensor_multivariate_normal_fn(loc_ratio, prec_ratio, num_clients, pr
 def tensor_loc_scale_fn(is_singular=False, loc_initializer=tf.random_normal_initializer(stddev=0.1),
                         untransformed_scale_initializer=tf.random_normal_initializer(mean=-3., stddev=0.1),
                         loc_regularizer=None, untransformed_scale_regularizer=None, loc_constraint=None,
-                        untransformed_scale_constraint=None):
+                        untransformed_scale_constraint=None, **kwargs):
     def _fn(dtype, shape, name, trainable, add_variable_fn):
         """Creates `loc`, `scale` parameters."""
         loc = add_variable_fn(
@@ -74,7 +82,8 @@ def tensor_loc_scale_fn(is_singular=False, loc_initializer=tf.random_normal_init
             regularizer=loc_regularizer,
             constraint=loc_constraint,
             dtype=dtype,
-            trainable=trainable)
+            trainable=trainable,
+            **kwargs)
         if is_singular:
             return loc, None
         untransformed_scale = add_variable_fn(
@@ -84,7 +93,8 @@ def tensor_loc_scale_fn(is_singular=False, loc_initializer=tf.random_normal_init
             regularizer=untransformed_scale_regularizer,
             constraint=untransformed_scale_constraint,
             dtype=dtype,
-            trainable=trainable)
+            trainable=trainable,
+            **kwargs)
         scale = tfp.util.DeferredTensor(untransformed_scale, tfp.bijectors.Softplus(), name=name + '_scale')
         return loc, scale
     return _fn
@@ -111,13 +121,18 @@ def aggregate_deltas_multi_layer(deltas):
 
 
 def aggregate_deltas_single_layer(deltas):
-    for i, (loc, signed_precision) in enumerate(deltas):
-        loc = tf.math.multiply(loc, signed_precision)
-        deltas[i] = (loc, signed_precision)
+    for delta_client in deltas:
+        for key, (loc, prec) in delta_client.items():
+            loc = tf.math.multiply(loc, prec)
+            delta_client[key] = (loc, prec)
 
-    deltas = list(zip(*deltas))
-    sum_prec = tf.math.add_n(deltas[1])
-    sum_loc = tf.math.add_n(deltas[0])
-    loc = tf.where(tf.abs(sum_prec) > eps, tf.math.xdivy(sum_loc, sum_prec),
-                   tf.float32.max*tf.sign(sum_loc)*tf.sign(sum_prec))
-    return loc, sum_prec
+    deltas = {key: [dic[key] for dic in deltas] for key in deltas[0]}
+    for key, lst in deltas.items():
+        locs, precs = zip(*lst)
+        sum_loc = tf.math.add_n(locs)
+        sum_prec = tf.math.add_n(precs)
+        loc = tf.where(tf.abs(sum_prec) > eps, tf.math.xdivy(sum_loc, sum_prec),
+                       tf.float32.max*tf.sign(sum_loc)*tf.sign(sum_prec))
+        deltas[key] = (loc, sum_prec)
+
+    return deltas
