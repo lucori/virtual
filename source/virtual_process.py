@@ -1,20 +1,15 @@
 import random
 from federated_devices import ClientVirtualSequential, ClientVirtualModel, ServerSequential, ServerModel
-from tfp_utils import aggregate_deltas_multi_layer
+from fed_process import FedProcess
 import tensorflow as tf
 from utils import avg_dict
 
 
-class VirtualFedProcess:
+class VirtualFedProcess(FedProcess):
 
     def __init__(self, model_fn, num_clients, damping_factor=1, fed_avg_init=True):
-
-        self.model_fn = model_fn
-        self.num_clients = num_clients
+        super(VirtualFedProcess, self).__init__(model_fn, num_clients)
         self.damping_factor = damping_factor
-        self.clients_indx = range(self.num_clients)
-        self.clients = []
-        self.server = None
         self.fed_avg_init = fed_avg_init
 
     def build(self, cards_train, hierarchical):
@@ -47,11 +42,11 @@ class VirtualFedProcess:
             clients_sampled = random.sample(self.clients_indx, clients_per_round)
             for indx in clients_sampled:
                 self.clients[indx].receive_and_save_weights(self.server)
-                self.clients[indx].renew_s_i()
+                self.clients[indx].renew_center()
                 if round > 0 and self.fed_avg_init:
                     self.clients[indx].initialize_kernel_posterior()
 
-                history_single = self.clients[indx].fit(federated_train_data[indx], verbose=0,
+                history_single = self.clients[indx].fit(federated_train_data[indx], verbose=1,
                                                         validation_data=federated_test_data[indx],
                                                         epochs=epochs_per_round, callbacks=callbacks)
                 history_train.append({key: history_single.history[key] for key in history_single.history.keys()
@@ -62,7 +57,7 @@ class VirtualFedProcess:
                 delta = self.clients[indx].compute_delta()
                 deltas.append(delta)
 
-            aggregated_deltas = aggregate_deltas_multi_layer(deltas)
+            aggregated_deltas = self.aggregate_deltas_multi_layer(deltas)
             self.server.apply_delta(aggregated_deltas)
             avg_train = avg_dict(history_train, [train_size[client] for client in clients_sampled])
             avg_test = avg_dict(history_test, test_size)

@@ -10,6 +10,11 @@ class _Client:
                 delta.append(layer.compute_delta())
         return delta
 
+    def renew_center(self):
+        for layer in self.layers:
+            if hasattr(layer, 'renew_center'):
+                layer.renew_center()
+
     def receive_and_save_weights(self, server):
         for l_c, l_s in zip(self.layers, server.layers):
             if hasattr(l_c, 'receive_and_save_weights'):
@@ -26,11 +31,11 @@ class _Server:
 
 class _ClientVirtual(_Client):
 
-    def renew_s_i(self):
+    def renew_center(self):
         if self.s_i_to_update:
             for layer in self.layers:
-                if hasattr(layer, 'renew_s_i'):
-                    layer.renew_s_i()
+                if hasattr(layer, 'renew_center'):
+                    layer.renew_center()
         else:
             self.s_i_to_update = True
 

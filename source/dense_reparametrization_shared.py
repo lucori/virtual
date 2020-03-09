@@ -1,26 +1,23 @@
 import tensorflow as tf
 import tensorflow_probability as tfp
 import math
-from tfp_utils import renormalize_mean_field_normal_fn, default_tensor_multivariate_normal_fn, precision_from_scale, \
-            compute_gaussian_ratio, compute_gaussian_prod, loc_ratio_from_precision
+from tfp_utils import renormalize_mean_field_normal_fn, default_tensor_multivariate_normal_fn, \
+            compute_gaussian_ratio, compute_gaussian_prod, loc_ratio_from_precision, softplus, \
+            precision_from_untransformed_scale, LocPrecTuple
 from tensorflow_probability.python import distributions as tfd
 from tensorflow_probability.python.layers import util as tfp_layers_util
 from tensorflow.python.keras import backend as K
 from tensorflow.python.keras import initializers
 from tensorflow.python.keras.layers.recurrent import _caching_device
 from tensorflow.python.keras.utils import tf_utils
-from tensorflow.python.ops import array_ops
-
+from centered_layers import LayerCentered
 
 inf = 1e15
-softplus = tfp.bijectors.Softplus()
-precision_from_untransformed_scale = tfp.bijectors.Chain([precision_from_scale, softplus])
 
 
-class VariationalReparametrized(tf.keras.layers.Layer):
+class VariationalReparametrized(LayerCentered):
 
     def build_posterior_fn(self, shape, dtype, name, posterior_fn, prior_fn):
-        self.non_trainable_variable_dict[name] = {}
         s_loc = self.add_variable(name=name+'_s_loc', shape=shape,
                                                                dtype=dtype, trainable=False,
                                                                initializer=tf.random_normal_initializer(
@@ -48,51 +45,24 @@ class VariationalReparametrized(tf.keras.layers.Layer):
         posterior_fn = posterior_fn(loc_ratio, prec_ratio)
         prior_fn = prior_fn(loc_ratio, prec_ratio, self.num_clients, self.prior_scale)
 
-        self.non_trainable_variable_dict[name]['s'] = (s_loc, s_prec)
-        self.non_trainable_variable_dict[name]['s_i'] = (s_i_loc, s_i_prec)
+        self.server_variable_dict[name] = LocPrecTuple((s_loc, s_prec))
+        self.client_center_variable_dict[name] = LocPrecTuple((s_i_loc, s_i_prec))
         return posterior_fn, prior_fn
 
-    def compute_delta(self):
-        delta_dict = {}
-        for key in self.trainable_variable_dict.keys():
-            delta_dict[key] = (self.delta_function(self.trainable_variable_dict[key],
-                                                   self.non_trainable_variable_dict[key]['s_i']))
-        return delta_dict
-
-    def renew_s_i(self):
-        for key in self.non_trainable_variable_dict.keys():
-            self.non_trainable_variable_dict[key]['s_i'][0].assign(self.trainable_variable_dict[key][0])
-            self.non_trainable_variable_dict[key]['s_i'][1].variables[0].assign(
-                self.trainable_variable_dict[key][1].variables[0])
-
-    def apply_delta(self, delta):
-        for key in self.non_trainable_variable_dict.keys():
-            loc, precision = self.apply_delta_function(self.non_trainable_variable_dict[key]['s'], delta[key])
-            self.non_trainable_variable_dict[key]['s'][0].assign(loc)
-            self.non_trainable_variable_dict[key]['s'][1].variables[0].assign(
-                precision_from_untransformed_scale.inverse(precision))
-
-    def receive_and_save_weights(self, layer_server):
-        for key in self.non_trainable_variable_dict.keys():
-            self.non_trainable_variable_dict[key]['s'][0].assign(layer_server.non_trainable_variable_dict[key]['s'][0])
-            self.non_trainable_variable_dict[key]['s'][1].variables[0].assign(
-                layer_server.non_trainable_variable_dict[key]['s'][1].variables[0])
-
     def initialize_kernel_posterior(self):
-        for key in self.non_trainable_variable_dict.keys():
-            self.trainable_variable_dict[key][0].assign(self.non_trainable_variable_dict[key]['s'][0])
-            self.trainable_variable_dict[key][1].variables[0].assign(
+        for key in self.client_variable_dict.keys():
+            self.client_variable_dict[key][0].assign(self.server_variable_dict[key][0])
+            self.client_variable_dict[key][1].variables[0].assign(
                 softplus.inverse(softplus.forward(
-                    self.non_trainable_variable_dict[key]['s'][1].variables[0])*math.sqrt(self.num_clients)))
+                    self.server_variable_dict[key][1].variables[0])*math.sqrt(self.num_clients)))
 
     def apply_damping(self, damping_factor):
-        for key in self.non_trainable_variable_dict.keys():
-            loc, prec = self.apply_delta_function((self.trainable_variable_dict[key][0],
-                                                   self.trainable_variable_dict[key][1]*damping_factor),
-                                                  (self.non_trainable_variable_dict[key]['s_i'][0],
-                                                   self.non_trainable_variable_dict[key]['s_i'][1]*(1-damping_factor)))
-            self.trainable_variable_dict[key][0].assign(loc)
-            self.trainable_variable_dict[key][1].variables[0].assign(precision_from_untransformed_scale.inverse(prec))
+        for key in self.server_variable_dict.keys():
+            loc, prec = self.apply_delta_function((self.client_variable_dict[key][0],
+                                                   self.client_variable_dict[key][1]*damping_factor),
+                                                  (self.client_center_variable_dict[key][0],
+                                                   self.client_center_variable_dict[key][1]*(1-damping_factor)))
+            self.client_variable_dict[key].assign((loc, prec))
 
 
 class DenseReparametrizationShared(tfp.layers.DenseReparameterization, VariationalReparametrized):
@@ -131,8 +101,9 @@ class DenseReparametrizationShared(tfp.layers.DenseReparameterization, Variation
         self.prior_scale = prior_scale
         self.delta_function = lambda t1, t2: compute_gaussian_ratio(*t1, *t2)
         self.apply_delta_function = lambda t1, t2: compute_gaussian_prod(*t1, *t2)
-        self.non_trainable_variable_dict = {}
-        self.trainable_variable_dict = {}
+        self.client_variable_dict = {}
+        self.client_center_variable_dict = {}
+        self.server_variable_dict = {}
 
     def build(self, input_shape):
         input_shape = tf.TensorShape(input_shape)
@@ -175,9 +146,9 @@ class DenseReparametrizationShared(tfp.layers.DenseReparameterization, Variation
                 dtype, [self.units], 'bias_prior',
                 self.trainable, self.add_variable)
 
-        self.trainable_variable_dict['kernel'] = (self.kernel_posterior.distribution.loc.pretransformed_input,
-                                                  self.kernel_posterior.distribution.scale
-                                                  .pretransformed_input.pretransformed_input)
+        self.client_variable_dict['kernel'] = LocPrecTuple((self.kernel_posterior.distribution.loc.pretransformed_input,
+                                                            self.kernel_posterior.distribution.scale
+                                                            .pretransformed_input.pretransformed_input))
         self.built = True
 
 
@@ -250,8 +221,9 @@ class LSTMCellVariational(tf.keras.layers.LSTMCell, VariationalReparametrized):
         self.prior_scale = prior_scale
         self.delta_function = lambda t1, t2: compute_gaussian_ratio(*t1, *t2)
         self.apply_delta_function = lambda t1, t2: compute_gaussian_prod(*t1, *t2)
-        self.non_trainable_variable_dict = {}
-        self.trainable_variable_dict = {}
+        self.client_variable_dict = {}
+        self.client_center_variable_dict = {}
+        self.server_variable_dict = {}
 
     @tf_utils.shape_type_conversion
     def build(self, input_shape):
@@ -333,13 +305,13 @@ class LSTMCellVariational(tf.keras.layers.LSTMCell, VariationalReparametrized):
             self.recurrent_kernel_prior,
             name='divergence_recurrent_kernel')
 
-        self.trainable_variable_dict['kernel'] = (self.kernel_posterior.distribution.loc.pretransformed_input,
-                                                  self.kernel_posterior.distribution.scale
-                                                  .pretransformed_input.pretransformed_input)
-        self.trainable_variable_dict['recurrent_kernel'] = (self.recurrent_kernel_posterior.distribution.loc.
-                                                            pretransformed_input,
-                                                            self.recurrent_kernel_posterior.distribution.scale
-                                                            .pretransformed_input.pretransformed_input)
+        self.client_variable_dict['kernel'] = LocPrecTuple((self.kernel_posterior.distribution.loc.pretransformed_input,
+                                                            self.kernel_posterior.distribution.scale
+                                                            .pretransformed_input.pretransformed_input))
+        self.client_variable_dict['recurrent_kernel'] = LocPrecTuple((self.recurrent_kernel_posterior.distribution.loc.
+                                                                      pretransformed_input,
+                                                                      self.recurrent_kernel_posterior.distribution.scale
+                                                                      .pretransformed_input.pretransformed_input))
         self.built = True
 
     def _apply_divergence(self, divergence_fn, posterior, prior, name, posterior_tensor=None):
@@ -359,8 +331,8 @@ class RNNVarReparametrized(tf.keras.layers.RNN):
     def compute_delta(self):
         return self.cell.compute_delta()
 
-    def renew_s_i(self):
-        self.cell.renew_s_i()
+    def renew_center(self):
+        self.cell.renew_center()
 
     def apply_delta(self, delta):
         self.cell.apply_delta(delta)

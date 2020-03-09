@@ -15,23 +15,6 @@ RECURRENT_DROPOUT_WARNING_MSG = (
     'Using `implementation=1`.')
 
 
-def aggregate_deltas_multi_layer_avg(deltas, train_size_ratio):
-    '''deltas is a list of delta, every element is a list of delta per layer'''
-    aggregated_deltas = []
-    deltas = list(map(list, zip(*deltas)))
-    for delta_layer in deltas:
-        aggregated_deltas.append(aggregate_deltas_single_layer_avg(delta_layer, train_size_ratio))
-    return aggregated_deltas
-
-
-def aggregate_deltas_single_layer_avg(deltas, train_size_ratio):
-    deltas = list(zip(*deltas))
-    aggregated = []
-    for delta in deltas:
-        aggregated.append(tf.math.add_n([d*ratio for d, ratio in zip(delta, train_size_ratio)]))
-    return aggregated
-
-
 @tf.keras.utils.register_keras_serializable(package='Custom')
 class CenteredL2Regularizer(tf.keras.regularizers.Regularizer):
     def __init__(self, l2=0.):
@@ -47,18 +30,25 @@ class CenteredL2Regularizer(tf.keras.regularizers.Regularizer):
 
 class LayerCentered(tf.keras.layers.Layer):
 
-    def receive_and_save_weights(self, layer):
-        for v_c, c_c, v_s in zip(self.trainable_variables, self.non_trainable_variables, layer.trainable_variables):
-            v_c.assign(v_s.numpy())
-            c_c.assign(v_s.numpy())
-
     def compute_delta(self):
-        delta = [v - c for v, c in zip(self.trainable_variables, self.non_trainable_variables)]
-        return tuple(delta)
+        delta_dict = {}
+        for key in self.client_variable_dict.keys():
+            delta_dict[key] = (self.delta_function(self.client_variable_dict[key],
+                                                   self.client_center_variable_dict[key]))
+        return delta_dict
+
+    def renew_center(self):
+        for key in self.client_center_variable_dict.keys():
+            self.client_center_variable_dict[key].assign(self.client_variable_dict[key])
 
     def apply_delta(self, delta):
-        for v, d in zip(self.trainable_variables, delta):
-            v.assign_add(d)
+        for key in self.server_variable_dict.keys():
+            add = self.apply_delta_function(self.server_variable_dict[key], delta[key])
+            self.server_variable_dict[key].assign(add)
+
+    def receive_and_save_weights(self, layer_server):
+        for key in self.server_variable_dict.keys():
+            self.server_variable_dict[key].assign(layer_server.server_variable_dict[key])
 
 
 class DenseCentered(tf.keras.layers.Dense, LayerCentered):
@@ -92,6 +82,11 @@ class DenseCentered(tf.keras.layers.Dense, LayerCentered):
 
         self.kernel_regularizer = kernel_regularizer()
         self.bias_regularizer = bias_regularizer()
+        self.delta_function = tf.subtract
+        self.apply_delta_function = tf.add
+        self.client_variable_dict = {}
+        self.server_variable_dict = {}
+        self.client_center_variable_dict = {}
 
     def build(self, input_shape):
         dtype = dtypes.as_dtype(self.dtype or K.floatx())
@@ -132,6 +127,10 @@ class DenseCentered(tf.keras.layers.Dense, LayerCentered):
                                         trainable=True)
         else:
             self.bias = None
+
+        self.client_variable_dict['kernel'] = self.kernel
+        self.server_variable_dict['kernel'] = self.kernel
+        self.client_center_variable_dict['kernel'] = self.kernel_regularizer.center
         self.built = True
 
 
@@ -177,6 +176,11 @@ class LSTMCellCentered(tf.keras.layers.LSTMCell, LayerCentered):
         self.kernel_regularizer = kernel_regularizer()
         self.recurrent_regularizer = recurrent_regularizer()
         self.bias_regularizer = bias_regularizer()
+        self.delta_function = tf.subtract
+        self.apply_delta_function = tf.add
+        self.client_variable_dict = {}
+        self.server_variable_dict = {}
+        self.client_center_variable_dict = {}
 
     @tf_utils.shape_type_conversion
     def build(self, input_shape):
@@ -232,6 +236,15 @@ class LSTMCellCentered(tf.keras.layers.LSTMCell, LayerCentered):
                           caching_device=default_caching_device)
         else:
             self.bias = None
+
+        self.client_variable_dict['kernel'] = self.kernel
+        self.server_variable_dict['kernel'] = self.kernel
+        self.client_center_variable_dict['kernel'] = self.kernel_regularizer.center
+
+        self.client_variable_dict['recurrent_kernel'] = self.recurrent_kernel
+        self.server_variable_dict['recurrent_kernel'] = self.recurrent_kernel
+        self.client_center_variable_dict['recurrent_kernel'] = self.recurrent_regularizer.center
+
         self.built = True
 
 
@@ -260,6 +273,11 @@ class EmbeddingCentered(tf.keras.layers.Embedding, LayerCentered):
                                                 input_length=input_length,
                                                 **kwargs)
         self.embeddings_regularizer = embeddings_regularizer()
+        self.delta_function = tf.subtract
+        self.apply_delta_function = tf.add
+        self.client_variable_dict = {}
+        self.server_variable_dict = {}
+        self.client_center_variable_dict = {}
 
     @tf_utils.shape_type_conversion
     def build(self, input_shape):
@@ -268,7 +286,7 @@ class EmbeddingCentered(tf.keras.layers.Embedding, LayerCentered):
                                                                  name='embeddings_center',
                                                                  initializer=tf.keras.initializers.constant(0.),
                                                                  dtype=self.dtype,
-                                                                 trainable=False),
+                                                                 trainable=False)
             self.embeddings = self.add_weight(shape=(self.input_dim, self.output_dim),
                                               initializer=self.embeddings_initializer,
                                               name='embeddings',
@@ -279,4 +297,9 @@ class EmbeddingCentered(tf.keras.layers.Embedding, LayerCentered):
                 create_weights()
         else:
             create_weights()
+
+        self.client_variable_dict['embeddings'] = self.embeddings
+        self.server_variable_dict['embeddings'] = self.embeddings
+        self.client_center_variable_dict['embeddings'] = self.embeddings_regularizer.center
+
         self.built = True

@@ -4,7 +4,9 @@ from tensorflow_probability.python import distributions as tfd
 import math
 
 eps = 1/tf.float32.max
+softplus = tfp.bijectors.Softplus()
 precision_from_scale = tfp.bijectors.Chain([tfp.bijectors.Reciprocal(), tfp.bijectors.Square()])
+precision_from_untransformed_scale = tfp.bijectors.Chain([precision_from_scale, softplus])
 
 
 def loc_prod_from_precision(loc1, p1, loc2, p2):
@@ -111,28 +113,8 @@ def reparametrize_loc_scale(loc, prec, loc_ratio, prec_ratio):
     return loc_reparametrized, scale_reparametrized
 
 
-def aggregate_deltas_multi_layer(deltas):
-    '''deltas is a list of delta, every element is a list of delta per layer'''
-    aggregated_deltas = []
-    deltas = list(map(list, zip(*deltas)))
-    for delta_layer in deltas:
-        aggregated_deltas.append(aggregate_deltas_single_layer(delta_layer))
-    return aggregated_deltas
+class LocPrecTuple(tuple):
 
-
-def aggregate_deltas_single_layer(deltas):
-    for delta_client in deltas:
-        for key, (loc, prec) in delta_client.items():
-            loc = tf.math.multiply(loc, prec)
-            delta_client[key] = (loc, prec)
-
-    deltas = {key: [dic[key] for dic in deltas] for key in deltas[0]}
-    for key, lst in deltas.items():
-        locs, precs = zip(*lst)
-        sum_loc = tf.math.add_n(locs)
-        sum_prec = tf.math.add_n(precs)
-        loc = tf.where(tf.abs(sum_prec) > eps, tf.math.xdivy(sum_loc, sum_prec),
-                       tf.float32.max*tf.sign(sum_loc)*tf.sign(sum_prec))
-        deltas[key] = (loc, sum_prec)
-
-    return deltas
+    def assign(self, loc_prec_tuple):
+        self[0].assign(loc_prec_tuple[0])
+        self[1].variables[0].assign(precision_from_untransformed_scale.inverse(loc_prec_tuple[1]))

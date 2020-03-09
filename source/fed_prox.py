@@ -1,22 +1,17 @@
 import random
 from federated_devices import ClientSequential, ServerSequential
-from centered_layers import aggregate_deltas_multi_layer_avg
+from fed_process import FedProcess
 import tensorflow as tf
 from utils import avg_dict, avg_dict_eval
 
 
-class FedProx:
+class FedProx(FedProcess):
 
     def __init__(self, model_fn, num_clients):
-
-        self.model_fn = model_fn
-        self.num_clients = num_clients
-        self.clients_indx = range(self.num_clients)
-        self.server = None
+        super(FedProx, self).__init__(model_fn, num_clients)
         self.client = None
-        self.build()
 
-    def build(self):
+    def build(self, *args, **kwargs):
         self.client = self.model_fn(ClientSequential, 1)
         self.server = self.model_fn(ServerSequential, 1)
 
@@ -27,6 +22,8 @@ class FedProx:
         self.train_summary_writer = tf.summary.create_file_writer(train_log_dir)
         self.test_summary_writer = tf.summary.create_file_writer(logdir)
 
+        self.build()
+
         for round in range(num_rounds):
 
             deltas = []
@@ -35,6 +32,7 @@ class FedProx:
             clients_sampled = random.sample(self.clients_indx, clients_per_round)
             for indx in clients_sampled:
                 self.client.receive_and_save_weights(self.server)
+                self.client.renew_center()
                 history_single = self.client.fit(federated_train_data[indx], verbose=0,
                                                  epochs=epochs_per_round, callbacks=callbacks)
                 history_train.append({key: history_single.history[key] for key in history_single.history.keys()
@@ -42,9 +40,9 @@ class FedProx:
                 delta = self.client.compute_delta()
                 deltas.append(delta)
 
-            aggregated_deltas = aggregate_deltas_multi_layer_avg(deltas,
-                                                                 [train_size[client]/sum(train_size)
-                                                                  for client in clients_sampled])
+            aggregated_deltas = self.aggregate_deltas_multi_layer(deltas,
+                                                                  [train_size[client]/sum(train_size)
+                                                                   for client in clients_sampled])
             self.server.apply_delta(aggregated_deltas)
             test = [self.server.evaluate(test_data, verbose=0) for test_data in federated_test_data]
             avg_train = avg_dict(history_train, [train_size[client] for client in clients_sampled])
