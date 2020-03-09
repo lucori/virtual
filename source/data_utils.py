@@ -5,9 +5,8 @@ import tensorflow_federated as tff
 
 
 SHUFFLE_BUFFER = 500
-BUFFER_SIZE = 500
-SEQ_LENGTH = 20
-BATCH_SIZE = 1
+BUFFER_SIZE = 10000
+SEQ_LENGTH = 80
 
 
 def post_process_datasets(federated_data, epochs=1):
@@ -23,8 +22,12 @@ def federated_dataset(name=None, num_clients=100):
         x_test = np.split(x_test, num_clients)
         y_test = np.split(y_test, num_clients)
 
-        federated_train_data = [tf.data.Dataset.from_tensor_slices(data) for data in zip(x_train, y_train)]
-        federated_test_data = [tf.data.Dataset.from_tensor_slices(data) for data in zip(x_test, y_test)]
+        federated_train_data = post_process_datasets([tf.data.Dataset.from_tensor_slices(data)
+                                                      for data in zip(x_train, y_train)])
+        federated_test_data = post_process_datasets([tf.data.Dataset.from_tensor_slices(data)
+                                                     for data in zip(x_test, y_test)])
+        train_size = [x.shape[0] for x in x_train]
+        test_size = [x.shape[0] for x in x_test]
 
     if name == 'femnist':
         emnist_train, emnist_test = tff.simulation.datasets.emnist.load_data()
@@ -43,64 +46,38 @@ def federated_dataset(name=None, num_clients=100):
         federated_train_data = make_federated_data(emnist_train, sample_clients)
         federated_test_data = make_federated_data(emnist_test, sample_clients)
 
+        train_size = [tf.data.experimental.cardinality(data).numpy() for data in federated_train_data]
+        test_size = [tf.data.experimental.cardinality(data).numpy() for data in federated_test_data]
+        federated_train_data = post_process_datasets(federated_train_data)
+        federated_test_data = post_process_datasets(federated_test_data)
+
     if name == 'shakespeare':
-        vocab = list('dhlptx@DHLPTX $(,048cgkoswCGKOSW[_#\'/37;?bfjnrvzBFJNRVZ"&*.26:\naeimquyAEIMQUY]!%)-159\r')
-        table = tf.lookup.StaticHashTable(
-            tf.lookup.KeyValueTensorInitializer(
-                keys=vocab, values=tf.constant(list(range(len(vocab))),
-                                               dtype=tf.int64)),
-            default_value=0)
-
-        def to_ids(x):
-            s = tf.reshape(x['snippets'], shape=[1])
-            chars = tf.strings.bytes_split(s).values
-            ids = table.lookup(chars)
-            return ids
-
-        def split_input_target(chunk):
-            input_text = tf.map_fn(lambda x: x[:-1], chunk)
-            target_text = tf.map_fn(lambda x: x[1:], chunk)
-            return (input_text, target_text)
-
-        def preprocess(dataset, sequence_length, batch_size):
-            return (
-                # Map ASCII chars to int64 indexes using the vocab
-                dataset.map(to_ids)
-                    # Split into individual chars
-                    .unbatch()
-                    # Form example sequences of SEQ_LENGTH +1
-                    .batch(sequence_length + 1, drop_remainder=True)
-                    # Shuffle and form minibatches
-                    .shuffle(BUFFER_SIZE).batch(batch_size, drop_remainder=True)
-                    # And finally split into (input, target) tuples,
-                    # each of length SEQ_LENGTH.
-                    .map(split_input_target))
-
-        train_data, test_data = tff.simulation.datasets.shakespeare.load_data()
-
-        def data(client, source, sequence_length, batch_size):
-            return preprocess(source.create_tf_dataset_for_client(client), sequence_length, batch_size)
-
-        clients = train_data.client_ids[0:num_clients]
-        federated_train_data = [data(client, train_data, SEQ_LENGTH, BATCH_SIZE) for client in clients]
-        federated_test_data = [data(client, test_data, SEQ_LENGTH, BATCH_SIZE) for client in clients]
+        federated_train_data, federated_test_data, train_size, test_size = shakspeare(num_clients)
 
     if name == 'pmnist':
         federated_train_data, federated_test_data = permuted_mnist(num_clients=num_clients)
+        train_size = [data[0].shape[0] for data in federated_train_data]
+        test_size = [data[0].shape[0] for data in federated_test_data]
         federated_train_data = [tf.data.Dataset.from_tensor_slices(data) for data in federated_train_data]
         federated_test_data = [tf.data.Dataset.from_tensor_slices(data) for data in federated_test_data]
+
     if name == 'human_activity':
         x, y = human_activity_preprocess()
-        x, y,x_t, y_t = data_split(x, y)
-        federated_train_data = [tf.data.Dataset.from_tensor_slices(data) for data in zip(x, y)]
-        federated_test_data = [tf.data.Dataset.from_tensor_slices(data) for data in zip(x_t, y_t)]
-    if name == 'vehicle_sensor':
-        x, y = vehicle_sensor_preprocess()
         x, y, x_t, y_t = data_split(x, y)
+        train_size = [xs.shape[0] for xs in x]
+        test_size = [xs.shape[0] for xs in x_t]
         federated_train_data = [tf.data.Dataset.from_tensor_slices(data) for data in zip(x, y)]
         federated_test_data = [tf.data.Dataset.from_tensor_slices(data) for data in zip(x_t, y_t)]
 
-    return federated_train_data, federated_test_data
+    if name == 'vehicle_sensor':
+        x, y = vehicle_sensor_preprocess()
+        x, y, x_t, y_t = data_split(x, y)
+        train_size = [xs.shape[0] for xs in x]
+        test_size = [xs.shape[0] for xs in x_t]
+        federated_train_data = [tf.data.Dataset.from_tensor_slices(data) for data in zip(x, y)]
+        federated_test_data = [tf.data.Dataset.from_tensor_slices(data) for data in zip(x_t, y_t)]
+
+    return federated_train_data, federated_test_data, train_size, test_size
 
 
 def data_split(x, y, test_size=0.25):
@@ -270,3 +247,77 @@ def vehicle_sensor_preprocess():
     x = np.split(x, split_index)
     y = np.split(y, split_index)
     return x, y
+
+
+def shakspeare(num_clients=-1):
+    vocab = list('dhlptx@DHLPTX $(,048cgkoswCGKOSW[_#\'/37;?bfjnrvzBFJNRVZ"&*.26:\naeimquyAEIMQUY]!%)-159\r')
+    table = tf.lookup.StaticHashTable(
+        tf.lookup.KeyValueTensorInitializer(
+            keys=vocab, values=tf.constant(list(range(1, len(vocab) + 1)),
+                                           dtype=tf.int64)),
+        default_value=tf.cast(0, tf.int64))
+
+    def to_ids(x):
+        s = tf.reshape(x['snippets'], shape=[1])
+        chars = tf.strings.bytes_split(s).values
+        ids = table.lookup(chars)
+        return ids
+
+    def preprocess(dataset):
+        return (
+            # Map ASCII chars to int64 indexes using the vocab
+            dataset.map(to_ids)
+                # Split into individual chars
+                .unbatch())
+        # Form example sequences of SEQ_LENGTH +1
+
+    def postprocess(dataset):
+        return (dataset.batch(SEQ_LENGTH + 1, drop_remainder=False)
+                # Shuffle and form minibatches
+                .shuffle(BUFFER_SIZE))
+                #.padded_batch(BATCH_SIZE, padded_shapes=[SEQ_LENGTH + 1],
+                #             drop_remainder=True,
+                #             padding_values=tf.cast(0, tf.int64))
+                # And finally split into (input, target) tuples,
+                # each of length SEQ_LENGTH.
+                #.map(split_input_target))
+
+    def data(client, source):
+        return postprocess(preprocess(source.create_tf_dataset_for_client(client)))
+
+    train_data, test_data = tff.simulation.datasets.shakespeare.load_data()
+    indx = [8, 11, 12, 17, 26, 32, 34, 43, 45, 66, 68, 72, 73,
+            85, 92, 93, 98, 105, 106, 108, 110, 130, 132, 143, 150, 153,
+            156, 158, 165, 169, 185, 187, 191, 199, 207, 212, 219, 227, 235,
+            236, 238, 257, 264, 269, 278, 281, 283, 285, 288, 297, 301, 305,
+            310, 324, 331, 340, 351, 362, 370, 373, 374, 375, 376, 383, 388,
+            418, 428, 429, 432, 433, 458, 471, 474, 476, 485, 491, 492, 494,
+            497, 500, 501, 507, 512, 519, 529, 543, 556, 564, 570, 573, 574,
+            579, 580, 581, 593, 600, 601, 603, 604, 613, 622, 626, 627, 632,
+            644, 645, 646, 648, 657, 658, 660, 663, 669, 671, 672, 676, 678,
+            681, 684, 695]
+
+    clients = [train_data.client_ids[i] for i in indx]
+    clients = clients[0:num_clients]
+
+    train_size = [len(list(preprocess(train_data.create_tf_dataset_for_client(client)))) for client in clients]
+    test_size = [len(list(preprocess(test_data.create_tf_dataset_for_client(client)))) for client in clients]
+
+    federated_train_data = [data(client, train_data) for client in clients]
+    federated_test_data = [data(client, test_data) for client in clients]
+
+    return federated_train_data, federated_test_data, train_size, test_size
+
+
+def batch_dataset(dataset, batch_size, padding):
+    if not padding:
+        return dataset.batch(batch_size)
+    else:
+        def split_input_target(chunk):
+            input_text = tf.map_fn(lambda x: x[:-1], chunk)
+            target_text = tf.map_fn(lambda x: x[1:], chunk)
+            return (input_text, target_text)
+
+        return dataset.padded_batch(batch_size, padded_shapes=[SEQ_LENGTH + 1],
+                                    drop_remainder=True,
+                                    padding_values=tf.cast(0, tf.int64)).map(split_input_target)

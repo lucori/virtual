@@ -1,5 +1,5 @@
 import os
-from data_utils import post_process_datasets, federated_dataset
+from data_utils import federated_dataset, batch_dataset
 import tensorflow as tf
 from experiment_utils import run_simulation, get_compiled_model_fn_from_dict
 from tensorboard.plugins.hparams import api as hp
@@ -32,13 +32,8 @@ hp_conf = config['hp']
 
 gpu_session(session_conf['num_gpus'])
 
-federated_train_data, federated_test_data = federated_dataset(data_set_conf['name'],
-                                                              num_clients=data_set_conf['num_clients'])
-train_size = [tf.data.experimental.cardinality(data).numpy() for data in federated_train_data]
-test_size = [tf.data.experimental.cardinality(data).numpy() for data in federated_test_data]
-
-federated_train_data = post_process_datasets(federated_train_data, 1)
-federated_test_data = post_process_datasets(federated_test_data)
+federated_train_data, federated_test_data, train_size, test_size = federated_dataset(data_set_conf['name'],
+                                                                                     num_clients=data_set_conf['num_clients'])
 
 num_clients = len(federated_train_data)
 model_conf['num_clients'] = num_clients
@@ -62,8 +57,12 @@ for session_num, exp in enumerate(experiments):
 
     all_params = {**training_conf, **model_conf, **exp}
 
-    federated_train_data_batched = [data.batch(all_params['batch_size']) for data in federated_train_data]
-    federated_test_data_batched = [data.batch(all_params['batch_size']) for data in federated_test_data]
+    federated_train_data_batched = [batch_dataset(data, all_params['batch_size'],
+                                                  padding=data_set_conf['name'] == 'shakespeare')
+                                    for data in federated_train_data]
+    federated_test_data_batched = [batch_dataset(data, all_params['batch_size'],
+                                                 padding=data_set_conf['name'] == 'shakespeare')
+                                   for data in federated_test_data]
 
     sample_batch = tf.nest.map_structure(
         lambda x: x.numpy(), iter(federated_train_data_batched[1]).next())
