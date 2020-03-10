@@ -47,3 +47,18 @@ def avg_dict(history_list, cards):
 def avg_dict_eval(eval_fed, cards):
     eval = np.array([np.array(eval)*card for eval, card in zip(eval_fed, cards)])
     return eval.sum(axis=0)
+
+
+class FlattenedCategoricalAccuracy(tf.keras.metrics.SparseCategoricalAccuracy):
+
+    def __init__(self, name='accuracy', dtype=None, vocab_size=0):
+        super().__init__(name, dtype=dtype)
+        self.vocab_size = vocab_size
+
+    def update_state(self, y_true, y_pred, sample_weight=None):
+        y_true = tf.reshape(y_true, [-1, 1])
+        y_pred = tf.reshape(y_pred, [-1, self.vocab_size+1, 1])
+        if sample_weight is not None:
+            sample_weight = tf.reshape(sample_weight, [-1, 1])
+        return super().update_state(
+            y_true, y_pred, sample_weight)

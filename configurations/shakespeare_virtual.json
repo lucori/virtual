@@ -3,8 +3,10 @@
         "num_gpus": 1
     },
     "data_set_conf":{
-        "name": "femnist",
-        "num_clients": 10
+        "name": "shakespeare",
+        "num_clients": 10,
+        "seq_length": 80,
+        "vocab_size": 86
     },
     "training_conf": {"method": "virtual",
                      "num_rounds": 5000,
@@ -15,15 +17,27 @@
                      "damping_factor": 1.0,
                      "kl_weight": 0.0001
     },
-   "model_conf": {"input_shape": [784],
-              "layer": "DenseReparametrizationShared",
-              "layer_units": [100, 100, 10],
-              "activations": ["relu", "relu", "softmax"],
-              "hierarchical": false,
-              "prior_scale": 1.0
+   "model_conf": {"layer": [{"name": "EmbeddingCentered",
+                             "input_dim": 87,
+                             "output_dim":  8
+                            },
+                            {"name": "LSTMCellVariational",
+                              "units": 256
+                            },
+                            {"name": "LSTMCellVariational",
+                              "units": 256
+                            },
+                            {"name": "DenseReparametrizationShared",
+                              "units": 87
+                            }
+                            ],
+                "hierarchical": false,
+                "prior_scale": 1.0,
+                "architecture": "rnn",
+                "l2_reg": 0.0
    },
-   "hp": {"epochs_per_round": [1, 5],
-         "learning_rate": [0.0005, 0.001, 0.002, 0.005],
-         "batch_size": [10, 20]
+   "hp": {"epochs_per_round": [1],
+         "learning_rate": [0.001],
+         "batch_size": [10]
    }
 }

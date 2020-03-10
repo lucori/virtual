@@ -6,7 +6,6 @@ import tensorflow_federated as tff
 
 SHUFFLE_BUFFER = 500
 BUFFER_SIZE = 10000
-SEQ_LENGTH = 80
 
 
 def post_process_datasets(federated_data, epochs=1):
@@ -14,7 +13,9 @@ def post_process_datasets(federated_data, epochs=1):
             for data in federated_data]
 
 
-def federated_dataset(name=None, num_clients=100):
+def federated_dataset(dataset_conf):
+    name = dataset_conf['name']
+    num_clients = dataset_conf['num_clients']
     if name == 'mnist':
         x_train, y_train, x_test, y_test = mnist_preprocess()
         x_train = np.split(x_train, num_clients)
@@ -52,7 +53,8 @@ def federated_dataset(name=None, num_clients=100):
         federated_test_data = post_process_datasets(federated_test_data)
 
     if name == 'shakespeare':
-        federated_train_data, federated_test_data, train_size, test_size = shakspeare(num_clients)
+        federated_train_data, federated_test_data, train_size, test_size = shakspeare(num_clients,
+                                                                                      dataset_conf['seq_length'])
 
     if name == 'pmnist':
         federated_train_data, federated_test_data = permuted_mnist(num_clients=num_clients)
@@ -249,7 +251,7 @@ def vehicle_sensor_preprocess():
     return x, y
 
 
-def shakspeare(num_clients=-1):
+def shakspeare(num_clients=-1, seq_lenght=80):
     vocab = list('dhlptx@DHLPTX $(,048cgkoswCGKOSW[_#\'/37;?bfjnrvzBFJNRVZ"&*.26:\naeimquyAEIMQUY]!%)-159\r')
     table = tf.lookup.StaticHashTable(
         tf.lookup.KeyValueTensorInitializer(
@@ -272,15 +274,8 @@ def shakspeare(num_clients=-1):
         # Form example sequences of SEQ_LENGTH +1
 
     def postprocess(dataset):
-        return (dataset.batch(SEQ_LENGTH + 1, drop_remainder=False)
-                # Shuffle and form minibatches
+        return (dataset.batch(seq_lenght + 1, drop_remainder=False)
                 .shuffle(BUFFER_SIZE))
-                #.padded_batch(BATCH_SIZE, padded_shapes=[SEQ_LENGTH + 1],
-                #             drop_remainder=True,
-                #             padding_values=tf.cast(0, tf.int64))
-                # And finally split into (input, target) tuples,
-                # each of length SEQ_LENGTH.
-                #.map(split_input_target))
 
     def data(client, source):
         return postprocess(preprocess(source.create_tf_dataset_for_client(client)))
@@ -309,7 +304,7 @@ def shakspeare(num_clients=-1):
     return federated_train_data, federated_test_data, train_size, test_size
 
 
-def batch_dataset(dataset, batch_size, padding):
+def batch_dataset(dataset, batch_size, padding=None, seq_length=None):
     if not padding:
         return dataset.batch(batch_size)
     else:
@@ -318,6 +313,7 @@ def batch_dataset(dataset, batch_size, padding):
             target_text = tf.map_fn(lambda x: x[1:], chunk)
             return (input_text, target_text)
 
-        return dataset.padded_batch(batch_size, padded_shapes=[SEQ_LENGTH + 1],
+        return dataset.padded_batch(batch_size,
+                                    padded_shapes=[seq_length + 1],
                                     drop_remainder=True,
                                     padding_values=tf.cast(0, tf.int64)).map(split_input_target)

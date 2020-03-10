@@ -46,7 +46,7 @@ class VirtualFedProcess(FedProcess):
                 if round > 0 and self.fed_avg_init:
                     self.clients[indx].initialize_kernel_posterior()
 
-                history_single = self.clients[indx].fit(federated_train_data[indx], verbose=1,
+                history_single = self.clients[indx].fit(federated_train_data[indx], verbose=0,
                                                         validation_data=federated_test_data[indx],
                                                         epochs=epochs_per_round, callbacks=callbacks)
                 history_train.append({key: history_single.history[key] for key in history_single.history.keys()

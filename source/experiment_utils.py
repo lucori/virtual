@@ -1,20 +1,23 @@
 import os
 import tensorflow as tf
-from dense_reparametrization_shared import DenseReparametrizationShared
+from dense_reparametrization_shared import DenseReparametrizationShared, LSTMCellVariational, RNNVarReparametrized
 from tensorflow_probability.python.distributions import kullback_leibler as kl_lib
 import tensorflow_federated as tff
 from virtual_process import VirtualFedProcess
 import random
 from fed_prox import FedProx
-from centered_layers import DenseCentered, CenteredL2Regularizer
+from centered_layers import DenseCentered, CenteredL2Regularizer, EmbeddingCentered
 from gate_layer import Gate
-from tensorflow.keras.layers import Dense
+from utils import FlattenedCategoricalAccuracy
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 
 
 def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
-    layer = globals()[dict_conf['layer']]
+    if isinstance(dict_conf['layer'], list):
+        layer = [globals()[l['name']] for l in dict_conf['layer']]
+    else:
+        layer = globals()[dict_conf['layer']]
 
     def create_model(model_class=tf.keras.Sequential, train_size=None):
         args = {}
@@ -33,6 +36,41 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
             args['activation'] = act
             layers.append(layer(l_u, **args))
             args.pop('input_shape', None)
+
+        return model_class(layers)
+
+    def create_model_nlp(model_class=tf.keras.Sequential, train_size=None):
+        layers = []
+        for l in dict_conf['layer']:
+            args = dict(l)
+            layer = globals()[l['name']]
+            if layer == DenseReparametrizationShared:
+                kernel_divergence_fn = (lambda q, p, ignore:  dict_conf['kl_weight'] * kl_lib.kl_divergence(q, p) / float(train_size))
+                args['kernel_divergence_fn'] = kernel_divergence_fn
+                args['num_clients'] = dict_conf['num_clients']
+                args['prior_scale'] = dict_conf['prior_scale']
+            if layer == DenseCentered:
+                args['kernel_regularizer'] = lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
+                args['bias_regularizer'] = lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
+            if layer == EmbeddingCentered:
+                args['embeddings_regularizer'] = lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
+                args['batch_input_shape'] = [dict_conf['batch_size'], dict_conf['seq_length']]
+                args['mask_zero'] = True
+            if layer == LSTMCellVariational:
+                args_cell = {}
+                args_cell['num_clients'] = dict_conf['num_clients']
+                args_cell['kernel_divergence_fn'] = (lambda q, p, ignore:
+                                                kl_lib.kl_divergence(q, p) / float(train_size))
+                args_cell['recurrent_kernel_divergence_fn'] = (lambda q, p, ignore:
+                                                          kl_lib.kl_divergence(q, p) / float(train_size))
+                cell = layer(args.pop('units'), **args_cell)
+                args['cell'] = cell
+                args['return_sequences'] = True
+                args['stateful'] = True
+                layer = RNNVarReparametrized
+
+            args.pop('name')
+            layers.append(layer(**args))
 
         return model_class(layers)
 
@@ -63,10 +101,15 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
         def loss_fn(y_true, y_pred):
             return tf.keras.losses.sparse_categorical_crossentropy(y_true, y_pred) + sum(model.losses)
 
+        metric = tf.keras.metrics.SparseCategoricalAccuracy()
+        if 'architecture' in dict_conf:
+            if dict_conf['architecture'] == 'rnn':
+                metric = FlattenedCategoricalAccuracy(vocab_size=dict_conf['vocab_size'])
+
         model.compile(optimizer=tf.optimizers.get({'class_name': dict_conf['optimizer'],
                                                    'config': {'learning_rate': dict_conf['learning_rate']}}),
                       loss=loss_fn,
-                      metrics=[tf.keras.metrics.SparseCategoricalAccuracy()])
+                      metrics=[metric])
         return model
 
     def model_fn(model_class=tf.keras.Sequential, train_size=None):
@@ -74,6 +117,10 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
         if 'hierarchical' in dict_conf:
             if dict_conf['hierarchical']:
                 create = create_model_hierarchical
+
+        if 'architecture' in dict_conf:
+            if dict_conf['architecture'] == 'rnn':
+                create = create_model_nlp
 
         model = compile_model(create(model_class, train_size))
         if dict_conf['method'] == 'fedavg':
