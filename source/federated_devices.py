@@ -41,7 +41,7 @@ class _ClientVirtual(_Client):
 
     def apply_damping(self, damping_factor):
         for layer in self.layers:
-            if hasattr(layer, 'damping_factor'):
+            if hasattr(layer, 'apply_damping'):
                 layer.apply_damping(damping_factor)
 
     def initialize_kernel_posterior(self):

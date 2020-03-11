@@ -9,13 +9,16 @@ precision_from_scale = tfp.bijectors.Chain([tfp.bijectors.Reciprocal(), tfp.bije
 precision_from_untransformed_scale = tfp.bijectors.Chain([precision_from_scale, softplus])
 
 
+def loc_prod_from_locprec(loc_times_prec, sum_prec):
+    return tf.where(tf.abs(sum_prec) > eps, tf.math.xdivy(loc_times_prec, sum_prec),
+                    tf.float32.max*tf.sign(loc_times_prec)*tf.sign(sum_prec))
+
+
 def loc_prod_from_precision(loc1, p1, loc2, p2):
     prec_prod = p1 + p2
     loc1p1 = tf.math.multiply(loc1, p1)
     loc2p2 = tf.math.multiply(loc2, p2)
-    loc = tf.where(tf.abs(prec_prod) > eps, tf.math.xdivy(loc1p1 + loc2p2, prec_prod),
-                   tf.float32.max*tf.sign(loc1p1 + loc2p2)*tf.sign(prec_prod))
-    return loc
+    return loc_prod_from_locprec(loc1p1 + loc2p2, prec_prod)
 
 
 def compute_gaussian_prod(loc1, p1, loc2, p2):

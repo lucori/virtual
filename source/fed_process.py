@@ -1,4 +1,5 @@
 import tensorflow as tf
+from tfp_utils import loc_prod_from_locprec
 eps = 1/tf.float32.max
 
 
@@ -40,12 +41,12 @@ class FedProcess:
         for key, lst in deltas.items():
             lst = zip(*lst)
             sum_el = []
-            for el in lst:
-                sum_el.append(tf.math.add_n(el))
+            for i, el in enumerate(lst):
+                add = tf.math.add_n(el)
+                sum_el.append(add)
 
             if len(sum_el) == 2:
-                loc = tf.where(tf.abs(sum_el[0]) > eps, tf.math.xdivy(sum_el[0], sum_el[1]),
-                               tf.float32.max*tf.sign(sum_el[0])*tf.sign(sum_el[1]))
+                loc = loc_prod_from_locprec(*sum_el)
                 deltas[key] = (loc, sum_el[1])
             else:
                 deltas[key] = sum_el[0]
