@@ -5,6 +5,7 @@ import numpy as np
 
 
 def gpu_session(num_gpus=None, gpus=None):
+    print(gpus, tf.config.experimental.list_physical_devices('GPU'))
     if gpus:
         os.environ["CUDA_VISIBLE_DEVICES"] = gpus
     elif num_gpus:
@@ -16,6 +17,7 @@ def gpu_session(num_gpus=None, gpus=None):
     num_gpus = len(os.environ["CUDA_VISIBLE_DEVICES"])
     gpus = os.environ["CUDA_VISIBLE_DEVICES"]
     print(os.environ["CUDA_VISIBLE_DEVICES"])
+    print(gpus, tf.config.experimental.list_physical_devices('GPU'))
     if gpus or num_gpus > 0:
         print(gpus, tf.config.experimental.list_physical_devices('GPU'))
         gpus = [tf.config.experimental.list_physical_devices('GPU')[int(gpu)] for gpu in gpus]
@@ -51,7 +53,7 @@ def avg_dict_eval(eval_fed, cards):
 
 class FlattenedCategoricalAccuracy(tf.keras.metrics.SparseCategoricalAccuracy):
 
-    def __init__(self, name='accuracy', dtype=None, vocab_size=0):
+    def __init__(self, name='sparse_categorical_accuracy', dtype=None, vocab_size=0):
         super().__init__(name, dtype=dtype)
         self.vocab_size = vocab_size
 

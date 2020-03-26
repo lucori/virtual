@@ -131,6 +131,12 @@ class DenseCentered(tf.keras.layers.Dense, LayerCentered):
         self.client_variable_dict['kernel'] = self.kernel
         self.server_variable_dict['kernel'] = self.kernel
         self.client_center_variable_dict['kernel'] = self.kernel_regularizer.center
+
+        if self.use_bias:
+            self.client_variable_dict['bias'] = self.bias
+            self.server_variable_dict['bias'] = self.bias
+            self.client_center_variable_dict['bias'] = self.bias_regularizer.center
+
         self.built = True
 
 
@@ -245,11 +251,27 @@ class LSTMCellCentered(tf.keras.layers.LSTMCell, LayerCentered):
         self.server_variable_dict['recurrent_kernel'] = self.recurrent_kernel
         self.client_center_variable_dict['recurrent_kernel'] = self.recurrent_regularizer.center
 
+        if self.use_bias:
+            self.client_variable_dict['bias'] = self.bias
+            self.server_variable_dict['bias'] = self.bias
+            self.client_center_variable_dict['bias'] = self.bias_regularizer.center
+
         self.built = True
 
 
-class RNNCentered(tf.keras.layers.RNN, LayerCentered):
-    pass
+class RNNCentered(tf.keras.layers.RNN):
+
+    def compute_delta(self):
+        return self.cell.compute_delta()
+
+    def renew_center(self):
+        self.cell.renew_center()
+
+    def apply_delta(self, delta):
+        self.cell.apply_delta(delta)
+
+    def receive_and_save_weights(self, layer_server):
+        self.cell.receive_and_save_weights(layer_server.cell)
 
 
 class EmbeddingCentered(tf.keras.layers.Embedding, LayerCentered):

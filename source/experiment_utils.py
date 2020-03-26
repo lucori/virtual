@@ -6,7 +6,7 @@ import tensorflow_federated as tff
 from virtual_process import VirtualFedProcess
 import random
 from fed_prox import FedProx
-from centered_layers import DenseCentered, CenteredL2Regularizer, EmbeddingCentered
+from centered_layers import DenseCentered, CenteredL2Regularizer, EmbeddingCentered, LSTMCellCentered, RNNCentered
 from gate_layer import Gate
 from utils import FlattenedCategoricalAccuracy
 
@@ -56,20 +56,32 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                 args['embeddings_regularizer'] = lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
                 args['batch_input_shape'] = [dict_conf['batch_size'], dict_conf['seq_length']]
                 args['mask_zero'] = True
+            if layer == LSTMCellCentered:
+                args_cell = dict(args)
+                args_cell['kernel_regularizer'] = lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
+                args_cell['recurrent_regularizer'] = lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
+                args_cell['bias_regularizer'] = lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
+                cell = layer(**args_cell)
+                args = {}
+                args['cell'] = cell
+                args['return_sequences'] = True
+                args['stateful'] = True
+                layer = RNNCentered
             if layer == LSTMCellVariational:
-                args_cell = {}
+                args_cell = dict(args)
                 args_cell['num_clients'] = dict_conf['num_clients']
                 args_cell['kernel_divergence_fn'] = (lambda q, p, ignore:
                                                 kl_lib.kl_divergence(q, p) / float(train_size))
                 args_cell['recurrent_kernel_divergence_fn'] = (lambda q, p, ignore:
                                                           kl_lib.kl_divergence(q, p) / float(train_size))
-                cell = layer(args.pop('units'), **args_cell)
+                cell = layer(**args_cell)
+                args = {}
                 args['cell'] = cell
                 args['return_sequences'] = True
                 args['stateful'] = True
                 layer = RNNVarReparametrized
 
-            args.pop('name')
+            args.pop('name', None)
             layers.append(layer(**args))
 
         return model_class(layers)
