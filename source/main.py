@@ -8,6 +8,7 @@ from utils import gpu_session
 import json
 from itertools import product
 import sys
+import gc
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 
@@ -85,3 +86,4 @@ for session_num, exp in enumerate(experiments):
     run_simulation(model_fn, federated_train_data_batched, federated_test_data_batched, train_size, test_size,
                    all_params, logdir_run)
     tf.keras.backend.clear_session()
+    gc.collect()

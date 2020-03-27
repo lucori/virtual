@@ -152,6 +152,7 @@ def run_simulation(model_fn, federated_train_data, federated_test_data, train_si
                             federated_test_data=federated_test_data,
                             tensorboard_updates=dict_conf['tensorboard_updates'],
                             logdir=logdir, hierarchical=dict_conf['hierarchical'])
+        del virtual_process
     elif dict_conf['method'] == 'fedavg':
         train_log_dir = logdir + '/train'
         train_summary_writer = tf.summary.create_file_writer(train_log_dir)
@@ -183,3 +184,4 @@ def run_simulation(model_fn, federated_train_data, federated_test_data, train_si
                             federated_test_data=federated_test_data,
                             tensorboard_updates=dict_conf['tensorboard_updates'],
                             logdir=logdir)
+        del fed_prox_process
