@@ -65,7 +65,7 @@ class VariationalReparametrized(LayerCentered):
             self.client_variable_dict[key].assign((loc, prec))
 
 
-class DenseReparametrizationShared(tfp.layers.DenseReparameterization, VariationalReparametrized):
+class DenseShared(VariationalReparametrized):
 
     def __init__(self, units,
                  activation=None,
@@ -84,19 +84,19 @@ class DenseReparametrizationShared(tfp.layers.DenseReparameterization, Variation
                  **kwargs
                  ):
 
-        super(DenseReparametrizationShared, self).__init__(units,
-                                                           activation=activation,
-                                                           activity_regularizer=activity_regularizer,
-                                                           trainable=trainable,
-                                                           kernel_posterior_fn=kernel_posterior_fn,
-                                                           kernel_posterior_tensor_fn=kernel_posterior_tensor_fn,
-                                                           kernel_prior_fn=kernel_prior_fn,
-                                                           kernel_divergence_fn=kernel_divergence_fn,
-                                                           bias_posterior_fn=bias_posterior_fn,
-                                                           bias_posterior_tensor_fn=bias_posterior_tensor_fn,
-                                                           bias_prior_fn=bias_prior_fn,
-                                                           bias_divergence_fn=bias_divergence_fn,
-                                                           **kwargs)
+        super(DenseShared, self).__init__(units,
+                                          activation=activation,
+                                          activity_regularizer=activity_regularizer,
+                                          trainable=trainable,
+                                          kernel_posterior_fn=kernel_posterior_fn,
+                                          kernel_posterior_tensor_fn=kernel_posterior_tensor_fn,
+                                          kernel_prior_fn=kernel_prior_fn,
+                                          kernel_divergence_fn=kernel_divergence_fn,
+                                          bias_posterior_fn=bias_posterior_fn,
+                                          bias_posterior_tensor_fn=bias_posterior_tensor_fn,
+                                          bias_prior_fn=bias_prior_fn,
+                                          bias_divergence_fn=bias_divergence_fn,
+                                          **kwargs)
         self.num_clients = num_clients
         self.prior_scale = prior_scale
         self.delta_function = lambda t1, t2: compute_gaussian_ratio(*t1, *t2)
@@ -150,6 +150,14 @@ class DenseReparametrizationShared(tfp.layers.DenseReparameterization, Variation
                                                             self.kernel_posterior.distribution.scale
                                                             .pretransformed_input.pretransformed_input))
         self.built = True
+
+
+class DenseReparametrizationShared(DenseShared, tfp.layers.DenseReparameterization):
+    pass
+
+
+class DenseLocalReparametrizationShared(DenseShared, tfp.layers.DenseLocalReparameterization):
+    pass
 
 
 class LSTMCellVariational(tf.keras.layers.LSTMCell, VariationalReparametrized):

@@ -1,6 +1,7 @@
 import os
 import tensorflow as tf
-from dense_reparametrization_shared import DenseReparametrizationShared, LSTMCellVariational, RNNVarReparametrized
+from dense_reparametrization_shared import DenseReparametrizationShared, DenseLocalReparametrizationShared, DenseShared
+from dense_reparametrization_shared import LSTMCellVariational, RNNVarReparametrized
 from tensorflow_probability.python.distributions import kullback_leibler as kl_lib
 import tensorflow_federated as tff
 from virtual_process import VirtualFedProcess
@@ -9,6 +10,7 @@ from fed_prox import FedProx
 from centered_layers import DenseCentered, CenteredL2Regularizer, EmbeddingCentered, LSTMCellCentered, RNNCentered
 from gate_layer import Gate
 from utils import FlattenedCategoricalAccuracy
+import gc
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 
@@ -21,7 +23,7 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
 
     def create_model(model_class=tf.keras.Sequential, train_size=None):
         args = {}
-        if layer == DenseReparametrizationShared:
+        if issubclass(layer, DenseShared):
             kernel_divergence_fn = (lambda q, p, ignore:  dict_conf['kl_weight'] * kl_lib.kl_divergence(q, p) / float(train_size))
             args['kernel_divergence_fn'] = kernel_divergence_fn
             args['num_clients'] = dict_conf['num_clients']
@@ -44,7 +46,7 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
         for l in dict_conf['layer']:
             args = dict(l)
             layer = globals()[l['name']]
-            if layer == DenseReparametrizationShared:
+            if issubclass(layer, DenseShared):
                 kernel_divergence_fn = (lambda q, p, ignore:  dict_conf['kl_weight'] * kl_lib.kl_divergence(q, p) / float(train_size))
                 args['kernel_divergence_fn'] = kernel_divergence_fn
                 args['num_clients'] = dict_conf['num_clients']
@@ -89,7 +91,7 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
     def create_model_hierarchical(model_class=tf.keras.Model, train_size=None):
         args_client = {}
         args_server = {}
-        if layer == DenseReparametrizationShared:
+        if issubclass(layer, DenseShared):
             kernel_divergence_fn = (
                 lambda q, p, ignore: dict_conf['kl_weight'] * kl_lib.kl_divergence(q, p) / float(train_size))
             args_server['kernel_divergence_fn'] = kernel_divergence_fn
@@ -152,7 +154,9 @@ def run_simulation(model_fn, federated_train_data, federated_test_data, train_si
                             federated_test_data=federated_test_data,
                             tensorboard_updates=dict_conf['tensorboard_updates'],
                             logdir=logdir, hierarchical=dict_conf['hierarchical'])
+        tf.keras.backend.clear_session()
         del virtual_process
+        gc.collect()
     elif dict_conf['method'] == 'fedavg':
         train_log_dir = logdir + '/train'
         train_summary_writer = tf.summary.create_file_writer(train_log_dir)
@@ -184,4 +188,6 @@ def run_simulation(model_fn, federated_train_data, federated_test_data, train_si
                             federated_test_data=federated_test_data,
                             tensorboard_updates=dict_conf['tensorboard_updates'],
                             logdir=logdir)
+        tf.keras.backend.clear_session()
         del fed_prox_process
+        gc.collect()
