@@ -8,6 +8,7 @@ from utils import gpu_session
 import json
 from itertools import product
 import sys
+import gc
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 
@@ -39,10 +40,14 @@ num_clients = len(federated_train_data)
 model_conf['num_clients'] = num_clients
 
 HP_DICT = {}
+runs = 1
 for key, values in hp_conf.items():
     HP_DICT[key] = hp.HParam(key,  hp.Discrete(values))
+    runs = runs*len(values)
+HP_DICT['run'] = hp.HParam('run', hp.Discrete(range(runs)))
+HP_DICT['method'] = hp.HParam('method', hp.Discrete(['virtual', 'fedprox']))
 
-logdir = os.path.join(dir_path, '../logs', data_set_conf['name'] + '_' + training_conf['method'] + '_' + current_time)
+logdir = os.path.join(dir_path, '../logs', data_set_conf['name'], training_conf['method'], current_time)
 
 with tf.summary.create_file_writer(logdir).as_default():
     hp.hparams_config(hparams=HP_DICT.values(),
@@ -52,11 +57,11 @@ with tf.summary.create_file_writer(logdir).as_default():
 
 keys, values = zip(*hp_conf.items())
 experiments = [dict(zip(keys, v)) for v in product(*values)]
+seq_length = data_set_conf.get('seq_length', None)
 
 for session_num, exp in enumerate(experiments):
 
     all_params = {**data_set_conf, **training_conf, **model_conf, **exp}
-    seq_length = data_set_conf.pop('seq_length', None)
     federated_train_data_batched = [batch_dataset(data, all_params['batch_size'],
                                                   padding=data_set_conf['name'] == 'shakespeare',
                                                   seq_length=seq_length)
@@ -67,9 +72,11 @@ for session_num, exp in enumerate(experiments):
                                    for data in federated_test_data]
 
     sample_batch = tf.nest.map_structure(
-        lambda x: x.numpy(), iter(federated_train_data_batched[1]).next())
+        lambda x: x.numpy(), iter(federated_train_data_batched[0]).next())
 
     hparams = dict([(HP_DICT[key], value) for key, value in exp.items()])
+    hparams['run'] = session_num
+    hparams['method'] = all_params['method']
 
     logdir_run = logdir + '/' + str(session_num)
     with tf.summary.create_file_writer(logdir_run).as_default():
@@ -78,3 +85,5 @@ for session_num, exp in enumerate(experiments):
     model_fn = get_compiled_model_fn_from_dict(all_params, sample_batch)
     run_simulation(model_fn, federated_train_data_batched, federated_test_data_batched, train_size, test_size,
                    all_params, logdir_run)
+    tf.keras.backend.clear_session()
+    gc.collect()
