@@ -11,6 +11,9 @@ from tensorflow.python.keras import initializers
 from tensorflow.python.keras.layers.recurrent import _caching_device
 from tensorflow.python.keras.utils import tf_utils
 from centered_layers import LayerCentered
+from tensorflow.python.eager import context
+from tensorflow.python.framework import ops
+from tensorflow_probability.python.layers.dense_variational import _DenseVariational
 
 inf = 1e15
 
@@ -158,6 +161,91 @@ class DenseReparametrizationShared(DenseShared, tfp.layers.DenseReparameterizati
 
 class DenseLocalReparametrizationShared(DenseShared, tfp.layers.DenseLocalReparameterization):
     pass
+
+
+class GaussianEmbedding(tf.keras.layers.Embedding, VariationalReparametrized):
+
+    def __init__(self,
+                 input_dim,
+                 output_dim,
+                 mask_zero=False,
+                 input_length=None,
+                 num_clients=1,
+                 prior_scale=1.,
+                 trainable=True,
+                 embedding_posterior_fn=renormalize_mean_field_normal_fn,
+                 embedding_posterior_tensor_fn=(lambda d: d.sample()),
+                 embedding_prior_fn=default_tensor_multivariate_normal_fn,
+                 embedding_divergence_fn=(lambda q, p, ignore: tfd.kl_divergence(q, p)),
+                 **kwargs
+                 ):
+
+        super(GaussianEmbedding, self).__init__(input_dim,
+                                                output_dim,
+                                                mask_zero=mask_zero,
+                                                input_length=input_length,
+                                                trainable=trainable,
+                                                **kwargs)
+        self.num_clients = num_clients
+        self.prior_scale = prior_scale
+        self.delta_function = lambda t1, t2: compute_gaussian_ratio(*t1, *t2)
+        self.apply_delta_function = lambda t1, t2: compute_gaussian_prod(*t1, *t2)
+        self.embedding_posterior_fn = embedding_posterior_fn
+        self.embedding_prior_fn = embedding_prior_fn
+        self.embedding_posterior_tensor_fn = embedding_posterior_tensor_fn
+        self.embedding_divergence_fn = embedding_divergence_fn
+        self.client_variable_dict = {}
+        self.client_center_variable_dict = {}
+        self.server_variable_dict = {}
+
+    def build(self, input_shape):
+        dtype = tf.as_dtype(self.dtype or tf.keras.backend.floatx())
+        shape = (self.input_dim, self.output_dim)
+        if context.executing_eagerly() and context.context().num_gpus():
+            with ops.device('cpu:0'):
+                self.embedding_posterior_fn, self.embedding_prior_fn = \
+                    self.build_posterior_fn(shape, dtype, 'embedding', self.embedding_posterior_fn,
+                                            self.embedding_prior_fn)
+        else:
+            self.embedding_posterior_fn, self.embedding_prior_fn = \
+                self.build_posterior_fn(shape, dtype, 'embedding', self.embedding_posterior_fn,
+                                        self.embedding_prior_fn)
+
+        self.embedding_posterior = self.embedding_posterior_fn(
+            dtype, shape, 'embedding_posterior',
+            self.trainable, self.add_variable)
+
+        self.embedding_prior = self.embedding_prior_fn(
+            dtype, shape, 'embedding_prior',
+            self.trainable, self.add_variable)
+
+        self.client_variable_dict['embedding'] = \
+            LocPrecTuple((self.embedding_posterior.distribution.loc.pretransformed_input,
+                          self.embedding_posterior.distribution.scale.pretransformed_input.pretransformed_input))
+
+        self.built = True
+
+    def _apply_divergence(self, divergence_fn, posterior, prior,
+                          posterior_tensor, name):
+        if (divergence_fn is None or
+                posterior is None or
+                prior is None):
+            divergence = None
+            return
+        divergence = tf.identity(
+            divergence_fn(
+                posterior, prior, posterior_tensor),
+            name=name)
+        self.add_loss(divergence)
+
+    def call(self, inputs):
+        self.embeddings = self.embedding_posterior_tensor_fn(self.embedding_posterior)
+        self._apply_divergence(self.embedding_divergence_fn,
+                               self.embedding_posterior,
+                               self.embedding_prior,
+                               self.embeddings,
+                               name='divergence_embeddings')
+        return super(GaussianEmbedding, self).call(inputs)
 
 
 class LSTMCellVariational(tf.keras.layers.LSTMCell, VariationalReparametrized):

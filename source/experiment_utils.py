@@ -1,7 +1,7 @@
 import os
 import tensorflow as tf
 from dense_reparametrization_shared import DenseReparametrizationShared, DenseLocalReparametrizationShared, DenseShared
-from dense_reparametrization_shared import LSTMCellVariational, RNNVarReparametrized
+from dense_reparametrization_shared import LSTMCellVariational, RNNVarReparametrized, GaussianEmbedding
 from tensorflow_probability.python.distributions import kullback_leibler as kl_lib
 import tensorflow_federated as tff
 from virtual_process import VirtualFedProcess
@@ -56,6 +56,14 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                 args['bias_regularizer'] = lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
             if layer == EmbeddingCentered:
                 args['embeddings_regularizer'] = lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
+                args['batch_input_shape'] = [dict_conf['batch_size'], dict_conf['seq_length']]
+                args['mask_zero'] = True
+            if layer == GaussianEmbedding:
+                embedding_divergence_fn = (
+                    lambda q, p, ignore: dict_conf['kl_weight'] * kl_lib.kl_divergence(q, p) / float(train_size))
+                args['embedding_divergence_fn'] = embedding_divergence_fn
+                args['num_clients'] = dict_conf['num_clients']
+                args['prior_scale'] = dict_conf['prior_scale']
                 args['batch_input_shape'] = [dict_conf['batch_size'], dict_conf['seq_length']]
                 args['mask_zero'] = True
             if layer == LSTMCellCentered:
