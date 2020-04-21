@@ -32,10 +32,12 @@ def federated_dataset(dataset_conf):
 
     if name == 'femnist':
         emnist_train, emnist_test = tff.simulation.datasets.emnist.load_data()
+        if 'shape' in dataset_conf:
+            post_shape = dataset_conf['shape']
 
         def preprocess(dataset):
             def element_fn(element):
-                return (tf.reshape(element['pixels'], [-1]),
+                return (tf.reshape(element['pixels'], post_shape),
                         (tf.reshape(element['label'], [1])))
 
             return dataset.map(element_fn)

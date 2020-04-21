@@ -15,7 +15,7 @@
                      "fed_avg_init": false,
                      "tensorboard_updates": 1
     },
-   "model_conf": {"layer": [{"name": "EmbeddingCentered",
+   "model_conf": {"layers": [{"name": "EmbeddingCentered",
                              "input_dim": 87,
                              "output_dim":  8
                             },
@@ -29,8 +29,7 @@
                               "units": 87,
                               "activation": "softmax"
                             }
-                            ],
-                "architecture": "rnn"
+                            ]
    },
    "hp": {"epochs_per_round": [1],
          "learning_rate": [0.01, 0.02, 0.05, 0.1],

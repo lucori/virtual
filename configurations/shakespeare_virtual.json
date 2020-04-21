@@ -16,7 +16,7 @@
                      "tensorboard_updates": 1,
                      "damping_factor": 1.0
     },
-   "model_conf": {"layer": [{"name": "EmbeddingCentered",
+   "model_conf": {"layers": [{"name": "EmbeddingCentered",
                              "input_dim": 87,
                              "output_dim":  8
                             },
@@ -33,7 +33,6 @@
                             ],
                 "hierarchical": false,
                 "prior_scale": 1.0,
-                "architecture": "rnn",
                 "l2_reg": 0.0
    },
    "hp": {"epochs_per_round": [1],
