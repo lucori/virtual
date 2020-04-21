@@ -114,7 +114,8 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
         model.compile(optimizer=tf.optimizers.get({'class_name': dict_conf['optimizer'],
                                                    'config': {'learning_rate': dict_conf['learning_rate']}}),
                       loss=loss_fn,
-                      metrics=[metric])
+                      metrics=[metric],
+                      experimental_run_tf_function=False)
         return model
 
     def model_fn(model_class=tf.keras.Sequential, train_size=None):
