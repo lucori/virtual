@@ -1,7 +1,9 @@
+import math
+
 import tensorflow as tf
 import tensorflow_probability as tfp
 from tensorflow_probability.python import distributions as tfd
-import math
+
 
 eps = 1/tf.float32.max
 softplus = tfp.bijectors.Softplus()

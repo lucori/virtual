@@ -1,18 +1,27 @@
 import os
-import tensorflow as tf
-from dense_reparametrization_shared import DenseReparametrizationShared, \
-    DenseLocalReparametrizationShared, DenseShared, Conv2DVirtual, Conv1DVirtual
-from dense_reparametrization_shared import LSTMCellVariational, RNNVarReparametrized, GaussianEmbedding
-from tensorflow_probability.python.distributions import kullback_leibler as kl_lib
-import tensorflow_federated as tff
-from virtual_process import VirtualFedProcess
 import random
-from fed_prox import FedProx
-from centered_layers import DenseCentered, CenteredL2Regularizer, EmbeddingCentered, LSTMCellCentered, RNNCentered
-from gate_layer import Gate
-from utils import FlattenedCategoricalAccuracy
-from tensorflow.keras.layers import MaxPooling2D, MaxPooling1D, Flatten
+
+import tensorflow as tf
+import tensorflow_federated as tff
+from tensorflow_probability.python.distributions import kullback_leibler as kl_lib
+from tensorflow.keras.layers import MaxPooling2D, Flatten
 import gc
+
+from source.virtual_process import VirtualFedProcess
+from source.fed_prox import FedProx
+from source.gate_layer import Gate
+from source.utils import FlattenedCategoricalAccuracy
+from source.centered_layers import (DenseCentered, CenteredL2Regularizer,
+                                    EmbeddingCentered, LSTMCellCentered,
+                                    RNNCentered)
+from source.dense_reparametrization_shared import Conv1DVirtual
+from source.dense_reparametrization_shared import Conv2DVirtual
+from source.dense_reparametrization_shared import DenseShared
+from source.dense_reparametrization_shared import DenseLocalReparametrizationShared
+from source.dense_reparametrization_shared import DenseReparametrizationShared
+from source.dense_reparametrization_shared import RNNVarReparametrized
+from source.dense_reparametrization_shared import GaussianEmbedding
+from source.dense_reparametrization_shared import LSTMCellVariational
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 

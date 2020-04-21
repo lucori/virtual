@@ -1,5 +1,5 @@
 import tensorflow as tf
-from tfp_utils import loc_prod_from_locprec
+from source.tfp_utils import loc_prod_from_locprec
 eps = 1/tf.float32.max
 
 

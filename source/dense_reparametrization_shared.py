@@ -1,22 +1,24 @@
-import tensorflow as tf
-import tensorflow_probability as tfp
 import math
-from tfp_utils import renormalize_mean_field_normal_fn, default_tensor_multivariate_normal_fn, \
-            compute_gaussian_ratio, compute_gaussian_prod, loc_ratio_from_precision, softplus, \
-            precision_from_untransformed_scale, LocPrecTuple
-from tensorflow_probability.python import distributions as tfd
-from tensorflow_probability.python.layers import util as tfp_layers_util
+import tensorflow as tf
 from tensorflow.python.keras import backend as K
 from tensorflow.python.keras import initializers
 from tensorflow.python.keras.layers.recurrent import _caching_device
 from tensorflow.python.layers import utils as tf_layers_util
 from tensorflow.python.ops import nn_ops
 from tensorflow.python.keras.utils import tf_utils
-from centered_layers import LayerCentered
 from tensorflow.python.eager import context
 from tensorflow.python.framework import ops
-from tensorflow_probability.python.layers.dense_variational import _DenseVariational
+import tensorflow_probability as tfp
+from tensorflow_probability.python import distributions as tfd
+from tensorflow_probability.python.layers import util as tfp_layers_util
 
+
+from source.centered_layers import LayerCentered
+from source.tfp_utils import (renormalize_mean_field_normal_fn,
+                              default_tensor_multivariate_normal_fn,
+                              compute_gaussian_ratio, compute_gaussian_prod,
+                              loc_ratio_from_precision, softplus,
+                              precision_from_untransformed_scale, LocPrecTuple)
 inf = 1e15
 
 

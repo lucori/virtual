@@ -1,8 +1,14 @@
 import random
-from federated_devices import ClientVirtualSequential, ClientVirtualModel, ServerSequential, ServerModel
-from fed_process import FedProcess
+
+
 import tensorflow as tf
-from utils import avg_dict
+
+from source.federated_devices import (ClientVirtualSequential,
+                                      ClientVirtualModel,
+                                      ServerSequential,
+                                      ServerModel)
+from source.fed_process import FedProcess
+from source.utils import avg_dict
 
 
 class VirtualFedProcess(FedProcess):
