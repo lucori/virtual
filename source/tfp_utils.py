@@ -12,6 +12,8 @@ precision_from_untransformed_scale = tfp.bijectors.Chain([precision_from_scale, 
 
 
 def loc_prod_from_locprec(loc_times_prec, sum_prec):
+    #TODO: check if condition tf.abs(sum_prec) > eps is ever satisfied and if the formula is stable
+    #TODO: in particular what if also tf.abs(sum_prec) < eps
     return tf.where(tf.abs(sum_prec) > eps, tf.math.xdivy(loc_times_prec, sum_prec),
                     tf.float32.max*tf.sign(loc_times_prec)*tf.sign(sum_prec))
 
@@ -116,6 +118,9 @@ def reparametrize_loc_scale(loc, prec, loc_ratio, prec_ratio):
     loc_reparametrized = tfp.util.DeferredTensor(loc, loc_reparametrization_fn)
     scale_reparametrized = tfp.util.DeferredTensor(precision_reparametrized, precision_from_scale.inverse)
     return loc_reparametrized, scale_reparametrized
+
+#TODO: reparametrize everything using natural parameter of gaussian
+#TODO: implement natural parameter gaussian distribution
 
 
 class LocPrecTuple(tuple):

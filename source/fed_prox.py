@@ -11,10 +11,10 @@ class FedProx(FedProcess):
 
     def __init__(self, model_fn, num_clients):
         super(FedProx, self).__init__(model_fn, num_clients)
-        self.client = None
+        self.clients = None
 
     def build(self, *args, **kwargs):
-        self.client = self.model_fn(ClientSequential, 1)
+        self.clients = [self.model_fn(ClientSequential, 1) for _ in range(self.num_clients)]
         self.server = self.model_fn(ServerSequential, 1)
 
     def fit(self, federated_train_data, num_rounds, clients_per_round, epochs_per_round, federated_test_data=None,
@@ -33,13 +33,13 @@ class FedProx(FedProcess):
 
             clients_sampled = random.sample(self.clients_indx, clients_per_round)
             for indx in clients_sampled:
-                self.client.receive_and_save_weights(self.server)
-                self.client.renew_center()
-                history_single = self.client.fit(federated_train_data[indx], verbose=0,
+                self.clients[indx].receive_and_save_weights(self.server)
+                self.clients[indx].renew_center()
+                history_single = self.clients[indx].fit(federated_train_data[indx], verbose=0,
                                                  epochs=epochs_per_round, callbacks=callbacks)
                 history_train.append({key: history_single.history[key] for key in history_single.history.keys()
                                       if 'val' not in key})
-                delta = self.client.compute_delta()
+                delta = self.clients[indx].compute_delta()
                 deltas.append(delta)
 
             aggregated_deltas = self.aggregate_deltas_multi_layer(deltas,

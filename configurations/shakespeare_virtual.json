@@ -16,7 +16,7 @@
                      "tensorboard_updates": 1,
                      "damping_factor": 1.0
     },
-   "model_conf": {"layers": [{"name": "EmbeddingCentered",
+   "model_conf": {"layer": [{"name": "GaussianEmbedding",
                              "input_dim": 87,
                              "output_dim":  8
                             },
@@ -36,8 +36,8 @@
                 "l2_reg": 0.0
    },
    "hp": {"epochs_per_round": [1],
-         "learning_rate": [0.005, 0.01, 0.02, 0.05],
+         "learning_rate": [0.015, 0.017],
          "batch_size": [10],
-         "kl_weight": [0.0001]
+         "kl_weight": [0.0001, 0.00001]
    }
 }
