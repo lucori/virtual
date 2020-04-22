@@ -8,6 +8,8 @@ from tensorflow.python.keras.layers.recurrent import _caching_device
 from tensorflow.python.keras.utils import tf_utils
 from tensorflow.python.eager import context
 from tensorflow.python.framework import ops
+from tensorflow.python.ops import nn_ops
+from tensorflow.python.keras.utils import conv_utils
 
 
 RECURRENT_DROPOUT_WARNING_MSG = (
@@ -323,5 +325,114 @@ class EmbeddingCentered(tf.keras.layers.Embedding, LayerCentered):
         self.client_variable_dict['embeddings'] = self.embeddings
         self.server_variable_dict['embeddings'] = self.embeddings
         self.client_center_variable_dict['embeddings'] = self.embeddings_regularizer.center
+
+        self.built = True
+
+
+class Conv2DCentered(tf.keras.layers.Conv2D, LayerCentered):
+    def __init__(self,
+                 filters,
+                 kernel_size,
+                 strides=(1, 1),
+                 padding='valid',
+                 data_format=None,
+                 dilation_rate=(1, 1),
+                 activation=None,
+                 use_bias=True,
+                 kernel_initializer='glorot_uniform',
+                 bias_initializer='zeros',
+                 kernel_regularizer=None,
+                 bias_regularizer=None,
+                 activity_regularizer=None,
+                 kernel_constraint=None,
+                 bias_constraint=None,
+                 **kwargs):
+        super(Conv2DCentered, self).__init__(
+            filters=filters,
+            kernel_size=kernel_size,
+            strides=strides,
+            padding=padding,
+            data_format=data_format,
+            dilation_rate=dilation_rate,
+            activation=activation,
+            use_bias=use_bias,
+            kernel_initializer=kernel_initializer,
+            bias_initializer=bias_initializer,
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer,
+            activity_regularizer=activity_regularizer,
+            kernel_constraint=kernel_constraint,
+            bias_constraint=bias_constraint,
+            **kwargs)
+
+        self.kernel_regularizer = kernel_regularizer()
+        self.bias_regularizer = bias_regularizer()
+        self.delta_function = tf.subtract
+        self.apply_delta_function = tf.add
+        self.client_variable_dict = {}
+        self.server_variable_dict = {}
+        self.client_center_variable_dict = {}
+
+    def build(self, input_shape):
+        input_shape = tensor_shape.TensorShape(input_shape)
+        input_channel = self._get_input_channel(input_shape)
+        kernel_shape = self.kernel_size + (input_channel, self.filters)
+
+        self.kernel_regularizer.center = \
+            self.add_weight('kernel_center',
+                            shape=kernel_shape,
+                            initializer=tf.keras.initializers.constant(0.),
+                            dtype=self.dtype,
+                            trainable=False)
+        self.kernel = self.add_weight(
+            name='kernel',
+            shape=kernel_shape,
+            initializer=self.kernel_initializer,
+            regularizer=self.kernel_regularizer,
+            constraint=self.kernel_constraint,
+            trainable=True,
+            dtype=self.dtype)
+        if self.use_bias:
+            self.bias_regularizer.center = \
+                self.add_weight('bias_center',
+                                shape=(self.filters,),
+                                initializer=tf.keras.initializers.constant(0.),
+                                dtype=self.dtype,
+                                trainable=False)
+            self.bias = self.add_weight(
+                name='bias',
+                shape=(self.filters,),
+                initializer=self.bias_initializer,
+                regularizer=self.bias_regularizer,
+                constraint=self.bias_constraint,
+                trainable=True,
+                dtype=self.dtype)
+        else:
+            self.bias = None
+        channel_axis = self._get_channel_axis()
+        self.input_spec = InputSpec(ndim=self.rank + 2,
+                                    axes={channel_axis: input_channel})
+
+        self._build_conv_op_input_shape = input_shape
+        self._build_input_channel = input_channel
+        self._padding_op = self._get_padding_op()
+        self._conv_op_data_format = conv_utils.convert_data_format(
+            self.data_format, self.rank + 2)
+        self._convolution_op = nn_ops.Convolution(
+            input_shape,
+            filter_shape=self.kernel.shape,
+            dilation_rate=self.dilation_rate,
+            strides=self.strides,
+            padding=self._padding_op,
+            data_format=self._conv_op_data_format)
+
+        self.client_variable_dict['kernel'] = self.kernel
+        self.server_variable_dict['kernel'] = self.kernel
+        self.client_center_variable_dict['kernel'] = self.kernel_regularizer.center
+
+        if self.use_bias:
+            self.client_variable_dict['bias'] = self.bias
+            self.server_variable_dict['bias'] = self.bias
+            self.client_center_variable_dict['bias'] = self.bias_regularizer.center
 
         self.built = True
