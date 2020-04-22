@@ -60,7 +60,8 @@ experiments = [dict(zip(keys, v)) for v in product(*values)]
 seq_length = data_set_conf.get('seq_length', None)
 
 for session_num, exp in enumerate(experiments):
-
+    #TODO: add all parameters to hp so that multiple runs can be sorted together.
+    #TODO: use multithreding or solve OOM problem with multiple runs in one gpu
     all_params = {**data_set_conf, **training_conf, **model_conf, **exp}
     federated_train_data_batched = [batch_dataset(data, all_params['batch_size'],
                                                   padding=data_set_conf['name'] == 'shakespeare',

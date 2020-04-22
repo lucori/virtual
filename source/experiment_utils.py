@@ -96,6 +96,7 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
 
         return model_class(layers)
 
+    #TODO: add hierarchical RNN
     def create_model_hierarchical(model_class=tf.keras.Model, train_size=None):
         args_client = {}
         args_server = {}
