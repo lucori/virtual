@@ -75,9 +75,9 @@ model_conf['num_clients'] = num_clients
 HP_DICT = {}
 runs = 1
 for key, values in hp_conf.items():
-    HP_DICT[key] = hp.HParam(key,  hp.Discrete(values))
+    HP_DICT[key] = hp.HParam(key)
     runs = runs*len(values)
-HP_DICT['run'] = hp.HParam('run', hp.Discrete(range(runs)))
+HP_DICT['run'] = hp.HParam('run')
 ADD_HP_DICT = create_additional_hparams(data_set_conf,
                                         training_conf,
                                         model_conf)
