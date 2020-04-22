@@ -14,6 +14,36 @@ from source.experiment_utils import (run_simulation,
                                      get_compiled_model_fn_from_dict)
 
 
+def create_additional_hparams(data_set_conf, training_conf,
+                              model_conf):
+    HP_DICT = {}
+    for key, value in data_set_conf.items():
+        HP_DICT[f'data_{key}'] = hp.HParam(f'data_{key}')
+    for key, value in training_conf.items():
+        HP_DICT[f'training_{key}'] = hp.HParam(f'training_{key}')
+    for key, value in model_conf.items():
+        HP_DICT[f'model_{key}'] = hp.HParam(f'model_{key}')
+    return HP_DICT
+
+
+def additional_hparams(data_set_conf, training_conf, model_conf):
+    hparams = {}
+    for key_1, value_1 in data_set_conf.items():
+        hparams[f'data_{key_1}'] = str(value_1)
+    for key_2, value_2 in training_conf.items():
+        hparams[f'training_{key_2}'] = str(value_2)
+    for key_3, value_3 in model_conf.items():
+        if key_3 == 'layers':
+            continue
+        hparams[f'model_{key_3}'] = str(value_3)
+
+    layers = ''
+    for layer in model_conf['layers']:
+        layers = layers + layer['name'] + '_'
+    hparams['model_layers'] = layers[:-1]
+    return hparams
+
+
 dir_path = os.path.dirname(os.path.realpath(__file__))
 
 # current time for file names
@@ -50,6 +80,10 @@ for key, values in hp_conf.items():
     runs = runs*len(values)
 HP_DICT['run'] = hp.HParam('run', hp.Discrete(range(runs)))
 HP_DICT['method'] = hp.HParam('method', hp.Discrete(['virtual', 'fedprox']))
+ADD_HP_DICT = create_additional_hparams(data_set_conf,
+                                        training_conf,
+                                        model_conf)
+HP_DICT = {**HP_DICT, **ADD_HP_DICT}
 
 logdir = os.path.join(dir_path, '../logs', data_set_conf['name'], training_conf['method'], current_time)
 
@@ -81,14 +115,24 @@ for session_num, exp in enumerate(experiments):
 
     hparams = dict([(HP_DICT[key], value) for key, value in exp.items()])
     hparams['run'] = session_num
-    hparams['method'] = all_params['method']
+    additional_params = additional_hparams(data_set_conf, training_conf, model_conf)
+    add_params = dict([(HP_DICT[key], value) for key, value in
+                       additional_params.items()])
+    hparams = {**hparams, **add_params}
 
     logdir_run = logdir + '/' + str(session_num)
+    print(f'Starting run {session_num} with parameters {all_params}')
+    print(f"saving results in {logdir_run}")
     with tf.summary.create_file_writer(logdir_run).as_default():
         hp.hparams(hparams)
+    with open(logdir_run + '/config.json', 'w') as config_file:
+        json.dump(config, config_file, indent=4)
 
     model_fn = get_compiled_model_fn_from_dict(all_params, sample_batch)
     run_simulation(model_fn, federated_train_data_batched, federated_test_data_batched, train_size, test_size,
                    all_params, logdir_run)
     tf.keras.backend.clear_session()
     gc.collect()
+
+
+
