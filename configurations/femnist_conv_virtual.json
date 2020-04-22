@@ -18,6 +18,18 @@
     },
    "model_conf": {"layers": [{"name": "Conv2DVirtual",
                               "input_shape": [1, 28, 28],
+                              "filters": 32,
+                              "kernel_size": 5,
+                              "padding": "SAME",
+                              "activation": "relu"
+                            },
+                              { "name": "MaxPooling2D",
+                              "pool_size": [2, 2],
+                              "strides": [2, 2],
+                              "padding": "SAME"
+                              },
+                              {"name": "Conv2DVirtual",
+                              "input_shape": [1, 28, 28],
                               "filters": 64,
                               "kernel_size": 5,
                               "padding": "SAME",
@@ -29,6 +41,14 @@
                               "padding": "SAME"
                               },
                             { "name": "Flatten"
+                            },
+                            { "name": "DenseReparametrizationShared",
+                              "units": 100,
+                              "activation": "relu"
+                            },
+                            { "name": "DenseReparametrizationShared",
+                              "units": 100,
+                              "activation": "relu"
                             },
                             { "name": "DenseReparametrizationShared",
                               "units": 10,
