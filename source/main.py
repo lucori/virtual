@@ -1,7 +1,7 @@
-import os
 import sys
 import datetime
 from itertools import product
+from pathlib import Path
 
 import tensorflow as tf
 from tensorboard.plugins.hparams import api as hp
@@ -26,7 +26,7 @@ def create_additional_hparams(data_set_conf, training_conf,
     return HP_DICT
 
 
-def additional_hparams(data_set_conf, training_conf, model_conf):
+def add_additional_hparams(data_set_conf, training_conf, model_conf):
     hparams = {}
     for key_1, value_1 in data_set_conf.items():
         hparams[f'data_{key_1}'] = str(value_1)
@@ -44,27 +44,26 @@ def additional_hparams(data_set_conf, training_conf, model_conf):
     return hparams
 
 
-dir_path = os.path.dirname(os.path.realpath(__file__))
-
-# current time for file names
-current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-print("Time:", current_time)
-
+# Paths
+file_path = Path(__file__).parent.absolute()
+root_path = file_path.parent
 if len(sys.argv) > 1:
-    config_file = sys.argv[1]
+    config_path = Path(sys.argv[1])
 else:
-    config_file = 'configurations/femnist_virtual.json'
-
-with open(dir_path + '/../' + config_file) as config_file:
+    config_path = Path('configurations/femnist_virtual.json')
+with open(root_path / config_path) as config_file:
     config = json.load(config_file)
+current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 
+# Configs
 session_conf = config['session']
 data_set_conf = config['data_set_conf']
 training_conf = config['training_conf']
 model_conf = config['model_conf']
+hp_conf = config['hp']
 if 'input_shape' in model_conf:
     model_conf['input_shape'] = tuple(model_conf['input_shape'])
-hp_conf = config['hp']
+
 
 gpu_session(session_conf['num_gpus'])
 
@@ -79,18 +78,19 @@ for key, values in hp_conf.items():
     HP_DICT[key] = hp.HParam(key,  hp.Discrete(values))
     runs = runs*len(values)
 HP_DICT['run'] = hp.HParam('run', hp.Discrete(range(runs)))
-HP_DICT['method'] = hp.HParam('method', hp.Discrete(['virtual', 'fedprox']))
 ADD_HP_DICT = create_additional_hparams(data_set_conf,
                                         training_conf,
                                         model_conf)
 HP_DICT = {**HP_DICT, **ADD_HP_DICT}
 
-logdir = os.path.join(dir_path, '../logs', data_set_conf['name'], training_conf['method'], current_time)
+logdir = root_path / 'logs' / f'{data_set_conf["name"]}_' \
+                              f'{training_conf["method"]}_' \
+                              f'{current_time}'
 
-with tf.summary.create_file_writer(logdir).as_default():
+with tf.summary.create_file_writer(str(logdir)).as_default():
     hp.hparams_config(hparams=HP_DICT.values(),
-                      metrics=[hp.Metric('sparse_categorical_accuracy', display_name='Accuracy')],
-                      )
+                      metrics=[hp.Metric('sparse_categorical_accuracy',
+                                         display_name='Accuracy')],)
 
 
 keys, values = zip(*hp_conf.items())
@@ -115,17 +115,17 @@ for session_num, exp in enumerate(experiments):
 
     hparams = dict([(HP_DICT[key], value) for key, value in exp.items()])
     hparams['run'] = session_num
-    additional_params = additional_hparams(data_set_conf, training_conf, model_conf)
+    additional_params = add_additional_hparams(data_set_conf, training_conf, model_conf)
     add_params = dict([(HP_DICT[key], value) for key, value in
                        additional_params.items()])
     hparams = {**hparams, **add_params}
 
-    logdir_run = logdir + '/' + str(session_num)
+    logdir_run = logdir / f'{session_num}_{current_time}'
     print(f'Starting run {session_num} with parameters {all_params}')
     print(f"saving results in {logdir_run}")
-    with tf.summary.create_file_writer(logdir_run).as_default():
+    with tf.summary.create_file_writer(str(logdir_run)).as_default():
         hp.hparams(hparams)
-    with open(logdir_run + '/config.json', 'w') as config_file:
+    with open(logdir_run / 'config.json', 'w') as config_file:
         json.dump(config, config_file, indent=4)
 
     model_fn = get_compiled_model_fn_from_dict(all_params, sample_batch)
