@@ -4,7 +4,7 @@ import random
 import tensorflow as tf
 import tensorflow_federated as tff
 from tensorflow_probability.python.distributions import kullback_leibler as kl_lib
-from tensorflow.keras.layers import MaxPooling2D, Flatten
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten
 import gc
 
 from source.virtual_process import VirtualFedProcess
@@ -13,7 +13,7 @@ from source.gate_layer import Gate
 from source.utils import FlattenedCategoricalAccuracy
 from source.centered_layers import (DenseCentered, CenteredL2Regularizer,
                                     EmbeddingCentered, LSTMCellCentered,
-                                    RNNCentered)
+                                    RNNCentered, Conv2DCentered)
 from source.dense_reparametrization_shared import Conv1DVirtual
 from source.dense_reparametrization_shared import Conv2DVirtual
 from source.dense_reparametrization_shared import DenseShared
@@ -48,6 +48,11 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                 layer_params['embeddings_regularizer'] = lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
                 layer_params['batch_input_shape'] = [dict_conf['batch_size'], dict_conf['seq_length']]
                 layer_params['mask_zero'] = True
+            if layer_class == Conv2DCentered:
+                layer_params['kernel_regularizer'] = \
+                    lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
+                layer_params['bias_regularizer'] = \
+                    lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
             if layer_class == GaussianEmbedding:
                 embedding_divergence_fn = (
                     lambda q, p, ignore: dict_conf['kl_weight'] * kl_lib.kl_divergence(q, p) / float(train_size))

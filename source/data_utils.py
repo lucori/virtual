@@ -32,6 +32,7 @@ def federated_dataset(dataset_conf):
 
     if name == 'femnist':
         emnist_train, emnist_test = tff.simulation.datasets.emnist.load_data()
+        post_shape = [-1]
         if 'shape' in dataset_conf:
             post_shape = dataset_conf['shape']
 

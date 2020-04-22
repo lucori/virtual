@@ -7,16 +7,13 @@
         "num_clients": 100,
         "shape": [1, 28, 28]
     },
-    "training_conf": {"method": "virtual",
+    "training_conf": {"method": "fedprox",
                      "num_rounds": 5000,
                      "clients_per_round": 5,
                      "optimizer": "adam",
-                     "fed_avg_init": false,
-                     "tensorboard_updates": 1,
-                     "damping_factor": 1.0,
-                     "kl_weight": 0.0001
+                     "tensorboard_updates": 1
     },
-   "model_conf": {"layers": [{"name": "Conv2DVirtual",
+   "model_conf": {"layers": [{"name": "Conv2DCentered",
                               "input_shape": [1, 28, 28],
                               "filters": 32,
                               "kernel_size": 5,
@@ -28,7 +25,7 @@
                               "strides": [2, 2],
                               "padding": "SAME"
                               },
-                              {"name": "Conv2DVirtual",
+                              {"name": "Conv2DCentered",
                               "input_shape": [1, 28, 28],
                               "filters": 64,
                               "kernel_size": 5,
@@ -42,24 +39,23 @@
                               },
                             { "name": "Flatten"
                             },
-                            { "name": "DenseReparametrizationShared",
+                            { "name": "DenseCentered",
                               "units": 100,
                               "activation": "relu"
                             },
-                            { "name": "DenseReparametrizationShared",
+                            { "name": "DenseCentered",
                               "units": 100,
                               "activation": "relu"
                             },
-                            { "name": "DenseReparametrizationShared",
+                            { "name": "DenseCentered",
                               "units": 10,
                               "activation": "softmax"
                             }
-                            ],
-                  "hierarchical": false,
-                  "prior_scale": 1.0
+                            ]
    },
    "hp": {"epochs_per_round": [1, 5],
          "learning_rate": [0.0005, 0.001, 0.002, 0.005],
-         "batch_size": [10, 20]
+         "batch_size": [10, 20],
+         "l2_reg": [0.0, 0.0001, 0.01, 0.1, 1.0]
    }
 }
