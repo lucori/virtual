@@ -12,15 +12,26 @@
                      "optimizer": "adam",
                      "tensorboard_updates": 1
                      },
-   "model_conf": {"input_shape": [561],
-              "layer": "DenseCentered",
-              "layer_units": [100, 100, 12],
-              "activations": ["relu", "relu", "softmax"]
+   "model_conf": {"layers": [{
+                "input_shape": [561],
+                "name": "DenseCentered",
+                "units": 100,
+                "activation": "relu"
               },
+                {
+                "name": "DenseCentered",
+                "units": 100,
+                "activation": "relu"
+              },
+                {
+                "name": "DenseCentered",
+                "units": 12,
+                "activation": "softmax"
+              }]
+   },
    "hp": {"epochs_per_round": [1, 5],
          "learning_rate": [0.0005, 0.001, 0.002, 0.005],
          "batch_size": [10, 20],
          "l2_reg": [0.0, 0.0001, 0.01, 0.1, 1]
    }
-}
 }

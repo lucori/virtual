@@ -33,7 +33,6 @@
                             ],
                 "hierarchical": false,
                 "prior_scale": 1.0,
-                "architecture": "rnn",
                 "l2_reg": 0.0
    },
    "hp": {"epochs_per_round": [1],

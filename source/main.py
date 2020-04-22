@@ -1,14 +1,18 @@
 import os
-from data_utils import federated_dataset, batch_dataset
-import tensorflow as tf
-from experiment_utils import run_simulation, get_compiled_model_fn_from_dict
-from tensorboard.plugins.hparams import api as hp
-import datetime
-from utils import gpu_session
-import json
-from itertools import product
 import sys
+import datetime
+from itertools import product
+
+import tensorflow as tf
+from tensorboard.plugins.hparams import api as hp
+import json
 import gc
+
+from source.data_utils import federated_dataset, batch_dataset
+from source.utils import gpu_session
+from source.experiment_utils import (run_simulation,
+                                     get_compiled_model_fn_from_dict)
+
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 

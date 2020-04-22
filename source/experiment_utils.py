@@ -1,103 +1,95 @@
 import os
-import tensorflow as tf
-from dense_reparametrization_shared import DenseReparametrizationShared, DenseLocalReparametrizationShared, DenseShared
-from dense_reparametrization_shared import LSTMCellVariational, RNNVarReparametrized, GaussianEmbedding
-from tensorflow_probability.python.distributions import kullback_leibler as kl_lib
-import tensorflow_federated as tff
-from virtual_process import VirtualFedProcess
 import random
-from fed_prox import FedProx
-from centered_layers import DenseCentered, CenteredL2Regularizer, EmbeddingCentered, LSTMCellCentered, RNNCentered
-from gate_layer import Gate
-from utils import FlattenedCategoricalAccuracy
+
+import tensorflow as tf
+import tensorflow_federated as tff
+from tensorflow_probability.python.distributions import kullback_leibler as kl_lib
+from tensorflow.keras.layers import MaxPooling2D, Flatten
 import gc
+
+from source.virtual_process import VirtualFedProcess
+from source.fed_prox import FedProx
+from source.gate_layer import Gate
+from source.utils import FlattenedCategoricalAccuracy
+from source.centered_layers import (DenseCentered, CenteredL2Regularizer,
+                                    EmbeddingCentered, LSTMCellCentered,
+                                    RNNCentered)
+from source.dense_reparametrization_shared import Conv1DVirtual
+from source.dense_reparametrization_shared import Conv2DVirtual
+from source.dense_reparametrization_shared import DenseShared
+from source.dense_reparametrization_shared import DenseLocalReparametrizationShared
+from source.dense_reparametrization_shared import DenseReparametrizationShared
+from source.dense_reparametrization_shared import RNNVarReparametrized
+from source.dense_reparametrization_shared import GaussianEmbedding
+from source.dense_reparametrization_shared import LSTMCellVariational
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 
 
 def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
-    if isinstance(dict_conf['layer'], list):
-        layer = [globals()[l['name']] for l in dict_conf['layer']]
-    else:
-        layer = globals()[dict_conf['layer']]
+    def create_seq_model(model_class=tf.keras.Sequential, train_size=None):
+        # Make sure layer parameters are a list
+        if not isinstance(dict_conf['layers'], list):
+            dict_conf['layers'] = [dict_conf['layers']]
 
-    def create_model(model_class=tf.keras.Sequential, train_size=None):
-        args = {}
-        if issubclass(layer, DenseShared):
-            kernel_divergence_fn = (lambda q, p, ignore:  dict_conf['kl_weight'] * kl_lib.kl_divergence(q, p) / float(train_size))
-            args['kernel_divergence_fn'] = kernel_divergence_fn
-            args['num_clients'] = dict_conf['num_clients']
-            args['prior_scale'] = dict_conf['prior_scale']
-        if layer == DenseCentered:
-            args['kernel_regularizer'] = lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
-            args['bias_regularizer'] = lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
         layers = []
-        for i, (l_u, act) in enumerate(zip(dict_conf['layer_units'], dict_conf['activations'])):
-            if i == 0:
-                args['input_shape'] = dict_conf['input_shape']
-            args['activation'] = act
-            layers.append(layer(l_u, **args))
-            args.pop('input_shape', None)
-
-        return model_class(layers)
-
-    def create_model_nlp(model_class=tf.keras.Sequential, train_size=None):
-        layers = []
-        for l in dict_conf['layer']:
-            args = dict(l)
-            layer = globals()[l['name']]
-            if issubclass(layer, DenseShared):
+        for layer_params in dict_conf['layers']:
+            layer_params = dict(layer_params)
+            layer_class = globals()[layer_params['name']]
+            if issubclass(layer_class, DenseShared):
                 kernel_divergence_fn = (lambda q, p, ignore:  dict_conf['kl_weight'] * kl_lib.kl_divergence(q, p) / float(train_size))
-                args['kernel_divergence_fn'] = kernel_divergence_fn
-                args['num_clients'] = dict_conf['num_clients']
-                args['prior_scale'] = dict_conf['prior_scale']
-            if layer == DenseCentered:
-                args['kernel_regularizer'] = lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
-                args['bias_regularizer'] = lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
-            if layer == EmbeddingCentered:
-                args['embeddings_regularizer'] = lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
-                args['batch_input_shape'] = [dict_conf['batch_size'], dict_conf['seq_length']]
-                args['mask_zero'] = True
-            if layer == GaussianEmbedding:
+                layer_params['kernel_divergence_fn'] = kernel_divergence_fn
+                layer_params['num_clients'] = dict_conf['num_clients']
+                layer_params['prior_scale'] = dict_conf['prior_scale']
+            if layer_class == DenseCentered:
+                layer_params['kernel_regularizer'] = lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
+                layer_params['bias_regularizer'] = lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
+            if layer_class == EmbeddingCentered:
+                layer_params['embeddings_regularizer'] = lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
+                layer_params['batch_input_shape'] = [dict_conf['batch_size'], dict_conf['seq_length']]
+                layer_params['mask_zero'] = True
+            if layer_class == GaussianEmbedding:
                 embedding_divergence_fn = (
                     lambda q, p, ignore: dict_conf['kl_weight'] * kl_lib.kl_divergence(q, p) / float(train_size))
-                args['embedding_divergence_fn'] = embedding_divergence_fn
-                args['num_clients'] = dict_conf['num_clients']
-                args['prior_scale'] = dict_conf['prior_scale']
-                args['batch_input_shape'] = [dict_conf['batch_size'], dict_conf['seq_length']]
-                args['mask_zero'] = True
-            if layer == LSTMCellCentered:
-                args_cell = dict(args)
-                args_cell['kernel_regularizer'] = lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
-                args_cell['recurrent_regularizer'] = lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
-                args_cell['bias_regularizer'] = lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
-                cell = layer(**args_cell)
-                args = {}
-                args['cell'] = cell
-                args['return_sequences'] = True
-                args['stateful'] = True
-                layer = RNNCentered
-            if layer == LSTMCellVariational:
-                args_cell = dict(args)
-                args_cell['num_clients'] = dict_conf['num_clients']
-                args_cell['kernel_divergence_fn'] = (lambda q, p, ignore:
+                layer_params['embedding_divergence_fn'] = embedding_divergence_fn
+                layer_params['num_clients'] = dict_conf['num_clients']
+                layer_params['prior_scale'] = dict_conf['prior_scale']
+                layer_params['batch_input_shape'] = [dict_conf['batch_size'], dict_conf['seq_length']]
+                layer_params['mask_zero'] = True
+            if layer_class == LSTMCellCentered:
+                cell_params = dict(layer_params)
+                cell_params['kernel_regularizer'] = lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
+                cell_params['recurrent_regularizer'] = lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
+                cell_params['bias_regularizer'] = lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
+                cell = layer_class(**cell_params)
+                layer_params= {'cell': cell,
+                               'return_sequences': True,
+                               'stateful': True}
+                layer_class = RNNCentered
+            if layer_class == LSTMCellVariational:
+                cell_params = dict(layer_params)
+                cell_params['num_clients'] = dict_conf['num_clients']
+                cell_params['kernel_divergence_fn'] = (lambda q, p, ignore:
                                                 kl_lib.kl_divergence(q, p) / float(train_size))
-                args_cell['recurrent_kernel_divergence_fn'] = (lambda q, p, ignore:
+                cell_params['recurrent_kernel_divergence_fn'] = (lambda q, p, ignore:
                                                           kl_lib.kl_divergence(q, p) / float(train_size))
-                cell = layer(**args_cell)
-                args = {}
-                args['cell'] = cell
-                args['return_sequences'] = True
-                args['stateful'] = True
-                layer = RNNVarReparametrized
+                cell = layer_class(**cell_params)
+                layer_params = {'cell': cell,
+                                'return_sequences': True,
+                                'stateful': True}
+                layer_class = RNNVarReparametrized
 
-            args.pop('name', None)
-            layers.append(layer(**args))
-
+            layer_params.pop('name', None)
+            layers.append(layer_class(**layer_params))
         return model_class(layers)
 
     #TODO: add hierarchical RNN
     def create_model_hierarchical(model_class=tf.keras.Model, train_size=None):
+        if isinstance(dict_conf['layers'], list):
+            layer = [globals()[l['name']] for l in dict_conf['layers']]
+        else:
+            layer = globals()[dict_conf['layers']]
+
         args_client = {}
         args_server = {}
         if issubclass(layer, DenseShared):
@@ -132,18 +124,14 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
         model.compile(optimizer=tf.optimizers.get({'class_name': dict_conf['optimizer'],
                                                    'config': {'learning_rate': dict_conf['learning_rate']}}),
                       loss=loss_fn,
-                      metrics=[metric])
+                      metrics=[metric],
+                      experimental_run_tf_function=False)
         return model
 
     def model_fn(model_class=tf.keras.Sequential, train_size=None):
-        create = create_model
-        if 'hierarchical' in dict_conf:
-            if dict_conf['hierarchical']:
-                create = create_model_hierarchical
-
-        if 'architecture' in dict_conf:
-            if dict_conf['architecture'] == 'rnn':
-                create = create_model_nlp
+        create = create_seq_model
+        if 'hierarchical' in dict_conf and dict_conf['hierarchical']:
+            create = create_model_hierarchical
 
         model = compile_model(create(model_class, train_size))
         if dict_conf['method'] == 'fedavg':

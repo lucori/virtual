@@ -1,7 +1,8 @@
 import os
-import GPUtil
+
 import tensorflow as tf
 import numpy as np
+import GPUtil
 
 
 def gpu_session(num_gpus=None, gpus=None):

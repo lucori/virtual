@@ -15,10 +15,22 @@
                      "damping_factor": 1.0,
                      "kl_weight": 0.0001
     },
-   "model_conf": {"input_shape": [100],
-              "layer": "DenseReparametrizationShared",
-              "layer_units": [100, 100, 2],
-              "activations": ["relu", "relu", "softmax"],
+   "model_conf": {"layers": [{
+                "input_shape": [100],
+                "name": "DenseReparametrizationShared",
+                "units": 100,
+                "activation": "relu"
+              },
+                {
+                "name": "DenseReparametrizationShared",
+                "units": 100,
+                "activation": "relu"
+              },
+                {
+                "name": "DenseReparametrizationShared",
+                "units": 2,
+                "activation": "softmax"
+              }],
               "hierarchical": false,
               "prior_scale": 1.0
    },

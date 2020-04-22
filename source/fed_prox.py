@@ -1,8 +1,10 @@
 import random
-from federated_devices import ClientSequential, ServerSequential
-from fed_process import FedProcess
+
 import tensorflow as tf
-from utils import avg_dict, avg_dict_eval
+
+from source.federated_devices import ClientSequential, ServerSequential
+from source.fed_process import FedProcess
+from source.utils import avg_dict, avg_dict_eval
 
 
 class FedProx(FedProcess):
