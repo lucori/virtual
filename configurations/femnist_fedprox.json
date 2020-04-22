@@ -7,7 +7,7 @@
         "num_clients": 100
     },
     "training_conf": {"method": "fedprox",
-                     "num_rounds": 5000,
+                     "num_rounds": 500,
                      "clients_per_round": 5,
                      "optimizer": "adam",
                      "tensorboard_updates": 1
@@ -17,9 +17,9 @@
               "layer_units": [100, 100, 10],
               "activations": ["relu", "relu", "softmax"]
               },
-   "hp": {"epochs_per_round": [1, 5],
-         "learning_rate": [0.0005, 0.001, 0.002, 0.005],
-         "batch_size": [10, 20],
-         "l2_reg": [0.0, 0.0001, 0.01, 0.1, 1]
+   "hp": {"epochs_per_round": [20, 50],
+         "learning_rate": [0.001],
+         "batch_size": [10],
+         "l2_reg": [0.0, 0.0001]
    }
 }

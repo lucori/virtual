@@ -7,7 +7,7 @@
         "num_clients": 100
     },
     "training_conf": {"method": "virtual",
-                     "num_rounds": 5000,
+                     "num_rounds": 500,
                      "clients_per_round": 5,
                      "optimizer": "adam",
                      "fed_avg_init": false,
@@ -16,14 +16,14 @@
                      "kl_weight": 0.0001
     },
    "model_conf": {"input_shape": [784],
-              "layer": "DenseReparametrizationShared",
               "layer_units": [100, 100, 10],
               "activations": ["relu", "relu", "softmax"],
-              "hierarchical": false,
               "prior_scale": 1.0
    },
-   "hp": {"epochs_per_round": [1, 5],
-         "learning_rate": [0.0005, 0.001, 0.002, 0.005],
-         "batch_size": [10, 20]
+   "hp": {"epochs_per_round": [20, 50],
+         "learning_rate": [0.001],
+         "batch_size": [10],
+         "layer": ["DenseReparametrizationShared", "DenseLocalReparametrizationShared"],
+         "hierarchical": [false, true]
    }
 }
