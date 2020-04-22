@@ -103,6 +103,7 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
         server_path = input
         for i, (l_u, act) in enumerate(zip(dict_conf['layer_units'], dict_conf['activations'])):
             args_client['activation'] = 'linear'
+            #TODO: change client path to tfp layers
             client_path = tf.keras.layers.Dense(l_u, **args_client)(client_path)
             args_server['activation'] = act
             server_path = layer(l_u, **args_server)(server_path)
