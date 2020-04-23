@@ -82,8 +82,9 @@ def submit_jobs(configs, root_path, data_dir=None, mem=8000):
             new_config['hp'][key] = [value]
 
         # Save the new config file
-        config_path = config_dir / f"{configs['config_name']}" \
-                                   f"_{session_num}.json"
+        config_path = config_dir / f"{configs['config_name']}_" \
+                                   f"g{current_time}_" \
+                                   f"{session_num}.json"
         with config_path.open(mode='w') as config_file:
             json.dump(new_config, config_file)
 
@@ -107,9 +108,8 @@ def run_experiments(configs, root_path, data_dir=None):
     hp_conf = configs['hp']
     if 'input_shape' in model_conf:
         model_conf['input_shape'] = tuple(model_conf['input_shape'])
-    logdir = root_path / 'logs' / f'{data_set_conf["name"]}_' \
-                                  f'{training_conf["method"]}_' \
-                                  f'{current_time}'
+    logdir = root_path / 'logs' / f'{configs["config_name"]}_' \
+                                  f'e{current_time}'
 
     fede_train_data, fed_test_data, train_size, test_size = federated_dataset(
         data_set_conf, data_dir)
