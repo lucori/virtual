@@ -12,6 +12,18 @@ conda env create -f environment.yml
 source activate virtual
 ```
 
+### Run on Leonhard
+You can submit several jobs on the Leonhard cluster simultanously. A job for all possible combinations of the `hp` parameters of the config file will be submitted.
+For Leonhard it is necessary that you download the data beforehand in a specific folder (i.e. `$DATADIR/tff_virtual/data/keras`) and pass this folder as `data_dir`.
+
+Below is an example where you should adapt both `result_dir` and `data_dir`:
+
+```
+module load gcc/6.3.0 python_gpu/3.7.4 hdf5/1.10.1
+
+python main.py configurations/femnist_fedprox.json --result_dir $DATADIR/tff_virtual --data_dir $DATADIR/tff_virtual/data/keras --leonhard
+```
+
 ## General usage
 
 We first imoort useful packages

@@ -1,6 +1,5 @@
 import random
 
-
 import tensorflow as tf
 
 from source.federated_devices import (ClientVirtualSequential,
@@ -33,9 +32,9 @@ class VirtualFedProcess(FedProcess):
     def fit(self, federated_train_data, num_rounds, clients_per_round, epochs_per_round, federated_test_data=None,
             tensorboard_updates=1, logdir='', callbacks=None, train_size=None, test_size=None, hierarchical=False):
 
-        train_log_dir = logdir + '/train'
-        self.train_summary_writer = tf.summary.create_file_writer(train_log_dir)
-        self.test_summary_writer = tf.summary.create_file_writer(logdir)
+        train_log_dir = logdir / 'train'
+        self.train_summary_writer = tf.summary.create_file_writer(str(train_log_dir))
+        self.test_summary_writer = tf.summary.create_file_writer(str(logdir))
 
         self.build(train_size, hierarchical)
 
