@@ -13,7 +13,7 @@ def post_process_datasets(federated_data, epochs=1):
             for data in federated_data]
 
 
-def federated_dataset(dataset_conf):
+def federated_dataset(dataset_conf, data_dir=None):
     name = dataset_conf['name']
     num_clients = dataset_conf['num_clients']
     if name == 'mnist':
@@ -31,7 +31,8 @@ def federated_dataset(dataset_conf):
         test_size = [x.shape[0] for x in x_test]
 
     if name == 'femnist':
-        emnist_train, emnist_test = tff.simulation.datasets.emnist.load_data()
+        emnist_train, emnist_test = \
+            tff.simulation.datasets.emnist.load_data(cache_dir=data_dir)
         post_shape = [-1]
         if 'shape' in dataset_conf:
             post_shape = dataset_conf['shape']
@@ -56,8 +57,8 @@ def federated_dataset(dataset_conf):
         federated_test_data = post_process_datasets(federated_test_data)
 
     if name == 'shakespeare':
-        federated_train_data, federated_test_data, train_size, test_size = shakspeare(num_clients,
-                                                                                      dataset_conf['seq_length'])
+        federated_train_data, federated_test_data, train_size, test_size = \
+            shakspeare(num_clients, dataset_conf['seq_length'], data_dir)
 
     if name == 'pmnist':
         federated_train_data, federated_test_data = permuted_mnist(num_clients=num_clients)
@@ -91,7 +92,8 @@ def data_split(x, y, test_size=0.25):
 
 
 def mnist_preprocess():
-    (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
+    (x_train, y_train), (x_test, y_test) = \
+        tf.keras.datasets.mnist.load_data()
     x_train = x_train.reshape((-1, 784))
     x_test = x_test.reshape((-1, 784))
     x_train = x_train.astype('float32')
@@ -254,7 +256,7 @@ def vehicle_sensor_preprocess():
     return x, y
 
 
-def shakspeare(num_clients=-1, seq_lenght=80):
+def shakspeare(num_clients=-1, seq_lenght=80, data_dir=None):
     vocab = list('dhlptx@DHLPTX $(,048cgkoswCGKOSW[_#\'/37;?bfjnrvzBFJNRVZ"&*.26:\naeimquyAEIMQUY]!%)-159\r')
     table = tf.lookup.StaticHashTable(
         tf.lookup.KeyValueTensorInitializer(
@@ -283,7 +285,8 @@ def shakspeare(num_clients=-1, seq_lenght=80):
     def data(client, source):
         return postprocess(preprocess(source.create_tf_dataset_for_client(client)))
 
-    train_data, test_data = tff.simulation.datasets.shakespeare.load_data()
+    train_data, test_data = tff.simulation.datasets.shakespeare.load_data(
+        cache_dir=data_dir)
     indx = [8, 11, 12, 17, 26, 32, 34, 43, 45, 66, 68, 72, 73,
             85, 92, 93, 98, 105, 106, 108, 110, 130, 132, 143, 150, 153,
             156, 158, 165, 169, 185, 187, 191, 199, 207, 212, 219, 227, 235,
