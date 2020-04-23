@@ -19,7 +19,7 @@ For Leonhard it is necessary that you download the data beforehand in a specific
 Below is an example where you should adapt both `result_dir` and `data_dir`:
 
 ```
-module load gcc/6.3.0 python_gpu/3.7.4
+module load gcc/6.3.0 python_gpu/3.7.4 hdf5/1.10.1
 
 python main.py configurations/femnist_fedprox.json --result_dir $DATADIR/tff_virtual --data_dir $DATADIR/tff_virtual/data/keras --leonhard
 ```
