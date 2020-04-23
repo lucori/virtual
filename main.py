@@ -27,6 +27,7 @@ def create_hparams(hp_conf, data_set_conf, training_conf,
     for key, _ in model_conf.items():
         HP_DICT[f'model_{key}'] = hp.HParam(f'model_{key}')
     HP_DICT['run'] = hp.HParam('run')
+    HP_DICT['config_name'] = hp.HParam('config_name')
 
     metrics = [hp.Metric('sparse_categorical_accuracy',
                          display_name='Accuracy')]
@@ -37,9 +38,9 @@ def create_hparams(hp_conf, data_set_conf, training_conf,
 
 
 def write_hparams(hp_dict, session_num, exp_conf, data_set_conf,
-                  training_conf, model_conf, logdir_run):
+                  training_conf, model_conf, logdir_run, config_name):
 
-    hparams = {'run': int(session_num)}
+    hparams = {'run': int(session_num), 'config_name': config_name}
     for key_0, value_0 in exp_conf.items():
         hparams[hp_dict[key_0]] = value_0
     for key_1, value_1 in data_set_conf.items():
@@ -81,7 +82,8 @@ def submit_jobs(configs, root_path, data_dir=None, mem=8000):
             new_config['hp'][key] = [value]
 
         # Save the new config file
-        config_path = config_dir / f'config_{session_num}.json'
+        config_path = config_dir / f"{configs['config_name']}" \
+                                   f"_{session_num}.json"
         with config_path.open(mode='w') as config_file:
             json.dump(new_config, config_file)
 
@@ -140,7 +142,8 @@ def run_experiments(configs, root_path, data_dir=None):
         logdir_run = logdir / f'{session_num}_{current_time}'
         print(f"saving results in {logdir_run}")
         write_hparams(HP_DICT, session_num, exp_conf, data_set_conf,
-                      training_conf, model_conf, logdir_run)
+                      training_conf, model_conf, logdir_run, configs[
+                          'config_name'])
         with open(logdir_run / 'config.json', 'w') as config_file:
             json.dump(configs, config_file, indent=4)
 
@@ -176,6 +179,8 @@ def main():
     # Read config files
     with args.config_path.absolute().open(mode='r') as config_file:
         configs = json.load(config_file)
+        configs['config_name'] = args.config_path.name.\
+            replace(args.config_path.suffix, "")
 
     if not args.result_dir:
         args.result_dir = Path(__file__).parent.absolute().parent
