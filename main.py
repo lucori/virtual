@@ -17,6 +17,9 @@ from source.experiment_utils import (run_simulation,
 
 def create_hparams(hp_conf, data_set_conf, training_conf,
                    model_conf, logdir):
+
+    # TODO: add a large predefined range for the most common parameters of
+    #  grid search. This makes the tensorboard search possible.
     HP_DICT = {}
     for key_0, _ in hp_conf.items():
         HP_DICT[key_0] = hp.HParam(key_0)
@@ -158,6 +161,11 @@ def run_experiments(configs, root_path, data_dir=None):
 
 def main():
     # Parse arguments
+    # TODO: Maybe using the scratch folder can fix the problem that dataset
+    #  gets removed everytime.
+
+    # TODO: Add a logging system instead of prints.
+
     parser = argparse.ArgumentParser()
     parser.add_argument("config_path",
                         type=Path,
