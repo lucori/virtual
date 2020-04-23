@@ -107,8 +107,7 @@ def run_experiments(configs, root_path, data_dir=None):
     hp_conf = configs['hp']
     if 'input_shape' in model_conf:
         model_conf['input_shape'] = tuple(model_conf['input_shape'])
-    logdir = root_path / 'logs' / f'{data_set_conf["name"]}_' \
-                                  f'{training_conf["method"]}_' \
+    logdir = root_path / 'logs' / f'{configs["config_name"]}_' \
                                   f'{current_time}'
 
     fede_train_data, fed_test_data, train_size, test_size = federated_dataset(
