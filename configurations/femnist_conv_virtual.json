@@ -4,7 +4,7 @@
     },
     "data_set_conf":{
         "name": "femnist",
-        "num_clients": 100,
+        "num_clients": 1,
         "shape": [1, 28, 28]
     },
     "training_conf": {"method": "virtual",
@@ -58,8 +58,8 @@
                   "hierarchical": false,
                   "prior_scale": 1.0
    },
-   "hp": {"epochs_per_round": [1, 5],
-         "learning_rate": [0.0005, 0.001, 0.002, 0.005],
-         "batch_size": [10, 20]
+   "hp": {"epochs_per_round": [5],
+         "learning_rate": [0.1, 0.01, 0.005],
+         "batch_size": [20]
    }
 }
