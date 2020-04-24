@@ -3,6 +3,7 @@ import random
 
 import tensorflow as tf
 import tensorflow_federated as tff
+import tensorflow_probability as tfp
 from tensorflow_probability.python.distributions import kullback_leibler as kl_lib
 from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten
 import gc
@@ -95,30 +96,33 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
 
     #TODO: add hierarchical RNN
     def create_model_hierarchical(model_class=tf.keras.Model, train_size=None):
-        if isinstance(dict_conf['layers'], list):
-            layer = [globals()[l['name']] for l in dict_conf['layers']]
-        else:
-            layer = globals()[dict_conf['layers']]
-
-        args_client = {}
-        args_server = {}
-        if issubclass(layer, DenseShared):
-            kernel_divergence_fn = (
-                lambda q, p, ignore: dict_conf['kl_weight'] * kl_lib.kl_divergence(q, p) / float(train_size))
-            args_server['kernel_divergence_fn'] = kernel_divergence_fn
-            args_server['num_clients'] = dict_conf['num_clients']
-            args_server['prior_scale'] = dict_conf['prior_scale']
-        input = tf.keras.layers.Input(shape=dict_conf['input_shape'])
+        input = tf.keras.layers.Input(shape=dict_conf['layers'][0]['input_shape'])
         client_path = input
         server_path = input
-        for i, (l_u, act) in enumerate(zip(dict_conf['layer_units'], dict_conf['activations'])):
-            args_client['activation'] = 'linear'
-            #TODO: change client path to tfp layers
-            client_path = tf.keras.layers.Dense(l_u, **args_client)(client_path)
-            args_server['activation'] = act
-            server_path = layer(l_u, **args_server)(server_path)
-            client_path = tf.keras.layers.Activation(activation=act)(tf.keras.layers.Add()(
-                [Gate()(client_path), (server_path)]))
+
+        for layer_params in dict_conf['layers']:
+            layer_params = dict(layer_params)
+            layer_class = globals()[layer_params['name']]
+            args_client = {}
+            args_server = {}
+            if issubclass(layer_class, DenseShared):
+                kernel_divergence_fn = (
+                    lambda q, p, ignore: dict_conf['kl_weight'] * kl_lib.kl_divergence(q, p) / float(train_size))
+                args_server['kernel_divergence_fn'] = kernel_divergence_fn
+                args_server['num_clients'] = dict_conf['num_clients']
+                args_server['prior_scale'] = dict_conf['prior_scale']
+                args_server['activation'] = layer_params['activation']
+
+                args_client['activation'] = 'linear'
+                args_client['kernel_divergence_fn'] = kernel_divergence_fn
+
+                client_path = tfp.layers.DenseReparameterization(layer_params['units'], **args_client)(client_path)
+                server_path = layer_class(layer_params['units'], **args_server)(server_path)
+                client_path = tf.keras.layers.Activation(activation=layer_params['activation'])(tf.keras.layers.Add()(
+                    [Gate()(client_path), server_path]))
+            else:
+                client_path = layer_class(**layer_params)(client_path)
+                server_path = layer_class(**layer_params)(server_path)
 
         return model_class(inputs=input, outputs=client_path)
 
