@@ -1,4 +1,9 @@
+import os
+from pathlib import Path
+import zipfile
+
 import numpy as np
+import pandas as pd
 from sklearn.model_selection import train_test_split
 import tensorflow as tf
 import tensorflow_federated as tff
@@ -68,7 +73,7 @@ def federated_dataset(dataset_conf, data_dir=None):
         federated_test_data = [tf.data.Dataset.from_tensor_slices(data) for data in federated_test_data]
 
     if name == 'human_activity':
-        x, y = human_activity_preprocess()
+        x, y = human_activity_preprocess(data_dir)
         x, y, x_t, y_t = data_split(x, y)
         train_size = [xs.shape[0] for xs in x]
         test_size = [xs.shape[0] for xs in x_t]
@@ -76,7 +81,7 @@ def federated_dataset(dataset_conf, data_dir=None):
         federated_test_data = [tf.data.Dataset.from_tensor_slices(data) for data in zip(x_t, y_t)]
 
     if name == 'vehicle_sensor':
-        x, y = vehicle_sensor_preprocess()
+        x, y = vehicle_sensor_preprocess(data_dir)
         x, y, x_t, y_t = data_split(x, y)
         train_size = [xs.shape[0] for xs in x]
         test_size = [xs.shape[0] for xs in x_t]
@@ -154,40 +159,41 @@ def download_file(url, filename):
     t.close()
 
 
-def human_activity_preprocess():
-    import os
-    import pandas as pd
-    import zipfile
+# It's important that the following link does not remove the zip file.
+# Otherwise the enxt time data will be downloaded again.
+def human_activity_preprocess(data_dir=None):
 
-    dir_path = os.path.dirname(os.path.realpath(__file__))
-    dir_path = os.path.dirname(dir_path)
-    dir_path = os.path.join(dir_path, 'data', 'human_activity')
+    if not data_dir:
+        data_dir = Path(__file__).parent.absolute().parent
+        data_dir = data_dir / 'data' / 'human_activity'
 
-    if not os.listdir(dir_path):
+        if not data_dir.exists():
+            data_dir.mkdir(parents=True)
+
+    subdirs = [f for f in data_dir.iterdir() if f.is_file()]
+    if not subdirs:
         url = 'https://archive.ics.uci.edu/ml/machine-learning-databases/00240/UCI%20HAR%20Dataset.zip'
-        zip_file = os.path.join(dir_path, 'original_data.zip')
+        zip_file = data_dir / 'original_data.zip'
         download_file(url, zip_file)
 
         with zipfile.ZipFile(zip_file, 'r') as zip_ref:
-            zip_ref.extractall(dir_path)
+            zip_ref.extractall(data_dir)
 
-        os.remove(zip_file)
+    data_dir = data_dir / 'UCI HAR Dataset'
+    data_dir_train = data_dir /  'train'
+    data_dir_test = data_dir / 'test'
 
-    dir_path = os.path.join(dir_path, 'UCI HAR Dataset')
-    dir_path_train = os.path.join(dir_path, 'train')
-    dir_path_test = os.path.join(dir_path, 'test')
-
-    x_train = pd.read_csv(os.path.join(dir_path_train, 'X_train.txt'),
+    x_train = pd.read_csv(data_dir_train / 'X_train.txt',
                           delim_whitespace=True, header=None).values
-    y_train = pd.read_csv(os.path.join(dir_path_train, 'y_train.txt'),
+    y_train = pd.read_csv(data_dir_train / 'y_train.txt',
                           delim_whitespace=True, header=None).values
-    task_index_train = pd.read_csv(os.path.join(dir_path_train, 'subject_train.txt'),
+    task_index_train = pd.read_csv(data_dir_train / 'subject_train.txt',
                                    delim_whitespace=True, header=None).values
-    x_test = pd.read_csv(os.path.join(dir_path_test, 'X_test.txt'),
+    x_test = pd.read_csv(data_dir_test / 'X_test.txt',
                          delim_whitespace=True, header=None).values
-    y_test = pd.read_csv(os.path.join(dir_path_test, 'y_test.txt'),
+    y_test = pd.read_csv(data_dir_test / 'y_test.txt',
                          delim_whitespace=True, header=None).values
-    task_index_test = pd.read_csv(os.path.join(dir_path_test, 'subject_test.txt'),
+    task_index_test = pd.read_csv(data_dir_test / 'subject_test.txt',
                                   delim_whitespace=True, header=None).values
 
     x = np.concatenate((x_train, x_test))
@@ -205,31 +211,30 @@ def human_activity_preprocess():
     return x, y
 
 
-def vehicle_sensor_preprocess():
-    import os
-    import pandas as pd
-    import zipfile
+# It's important that the following link does not remove the zip file.
+# Otherwise the enxt time data will be downloaded again.
+def vehicle_sensor_preprocess(data_dir=None):
+    if not data_dir:
+        data_dir = Path(__file__).parent.absolute().parent
+        data_dir = data_dir / 'data' / 'vehicle_sensor'
 
-    dir_path = os.path.dirname(os.path.realpath(__file__))
-    dir_path = os.path.dirname(dir_path)
-    dir_path = os.path.join(dir_path, 'data/vehicle_sensor')
+        if not data_dir.exists():
+            data_dir.mkdir(parents=True)
 
-    if not os.listdir(dir_path):
+    subdirs = [f for f in data_dir.iterdir() if f.is_file()]
+    if not subdirs:
         url = 'http://www.ecs.umass.edu/~mduarte/images/event.zip'
-        zip_file = os.path.join(dir_path, 'original_data.zip')
+        zip_file = data_dir / 'original_data.zip'
         download_file(url, zip_file)
 
         with zipfile.ZipFile(zip_file, 'r') as zip_ref:
-            zip_ref.extractall(dir_path)
-
-        os.remove(zip_file)
-    dir_path = os.path.join(dir_path, 'events', 'runs')
+            zip_ref.extractall(data_dir)
+    data_dir = data_dir / 'events' / 'runs'
 
     x = []
     y = []
     task_index = []
-
-    for root, dir, file_names in os.walk(dir_path):
+    for root, dir, file_names in os.walk(data_dir):
         if 'acoustic' not in root and 'seismic' not in root:
             x_tmp = []
             for file_name in file_names:

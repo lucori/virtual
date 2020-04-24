@@ -41,6 +41,11 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                 layer_params['kernel_divergence_fn'] = kernel_divergence_fn
                 layer_params['num_clients'] = dict_conf['num_clients']
                 layer_params['prior_scale'] = dict_conf['prior_scale']
+            if layer_class == Conv2DVirtual:
+                kernel_divergence_fn = (lambda q, p, ignore: dict_conf['kl_weight'] * kl_lib.kl_divergence(q, p) / float(train_size))
+                layer_params['kernel_divergence_fn'] = kernel_divergence_fn
+                layer_params['num_clients'] = dict_conf['num_clients']
+                layer_params['prior_scale'] = dict_conf['prior_scale']
             if layer_class == DenseCentered:
                 layer_params['kernel_regularizer'] = lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
                 layer_params['bias_regularizer'] = lambda: CenteredL2Regularizer(dict_conf['l2_reg'])

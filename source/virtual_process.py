@@ -76,4 +76,4 @@ class VirtualFedProcess(FedProcess):
                         tf.summary.scalar(key, avg_test[key], step=round)
 
         for i, client in enumerate(self.clients):
-            client.save_weights(logdir + '/weights_' + str(i) + '.h5')
+            client.save_weights(str(logdir / f'weights_{i}.h5'))

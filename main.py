@@ -1,4 +1,6 @@
+from os import environ as os_environ
 import subprocess
+from shutil import copytree
 import datetime
 from itertools import product
 from pathlib import Path
@@ -19,7 +21,20 @@ def create_hparams(hp_conf, data_set_conf, training_conf,
                    model_conf, logdir):
     HP_DICT = {}
     for key_0, _ in hp_conf.items():
-        HP_DICT[key_0] = hp.HParam(key_0)
+        if (key_0 == 'learning_rate'
+                or key_0 == 'kl_weight'
+                or key_0 == 'l2_reg'):
+            HP_DICT[key_0] = hp.HParam(key_0, hp.RealInterval(0.0, 1.0))
+        elif key_0 == 'batch_size':
+            HP_DICT[key_0] = hp.HParam(key_0, hp.Discrete([1, 5, 10, 20, 40,
+                                                           64, 128, 256, 512]))
+        elif key_0 == 'epochs_per_round':
+            HP_DICT[key_0] = hp.HParam(key_0, hp.Discrete([1, 5, 10, 15, 20]))
+        elif key_0 == 'method':
+            HP_DICT[key_0] = hp.HParam(key_0, hp.Discrete(['virtual',
+                                                           'fedprox']))
+        else:
+            HP_DICT[key_0] = hp.HParam(key_0)
     for key, _ in data_set_conf.items():
         HP_DICT[f'data_{key}'] = hp.HParam(f'data_{key}')
     for key, _ in training_conf.items():
@@ -68,7 +83,7 @@ def _gridsearch(hp_conf):
     return experiments
 
 
-def submit_jobs(configs, root_path, data_dir=None, mem=8000):
+def submit_jobs(configs, root_path, data_dir, mem=8000, use_scratch=False):
     current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     config_dir = root_path / f'temp_configs_{current_time}'
     config_dir.mkdir(exist_ok=True)
@@ -82,8 +97,9 @@ def submit_jobs(configs, root_path, data_dir=None, mem=8000):
             new_config['hp'][key] = [value]
 
         # Save the new config file
-        config_path = config_dir / f"{configs['config_name']}" \
-                                   f"_{session_num}.json"
+        config_path = config_dir / f"{configs['config_name']}_" \
+                                   f"g{current_time}_" \
+                                   f"{session_num}.json"
         with config_path.open(mode='w') as config_file:
             json.dump(new_config, config_file)
 
@@ -93,11 +109,20 @@ def submit_jobs(configs, root_path, data_dir=None, mem=8000):
                    f"ngpus_excl_p=1] "
                    f"python main.py --result_dir {root_path} "
                    f"--data_dir {data_dir} "
+                   f"{'--scratch ' if use_scratch else ''}"
                    f"{config_path}")
         subprocess.check_output(command.split())
 
 
-def run_experiments(configs, root_path, data_dir=None):
+def run_experiments(configs, root_path, data_dir=None, use_scratch=False):
+
+    if use_scratch:
+        dir_name = data_dir.name
+        temp_dir = Path(os_environ['TMPDIR']) / dir_name
+        print(f"Copying datafiles to the scratch folder {temp_dir}")
+        copytree(str(data_dir), str(temp_dir))
+        data_dir = temp_dir
+
     current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 
     # Configs
@@ -107,9 +132,8 @@ def run_experiments(configs, root_path, data_dir=None):
     hp_conf = configs['hp']
     if 'input_shape' in model_conf:
         model_conf['input_shape'] = tuple(model_conf['input_shape'])
-    logdir = root_path / 'logs' / f'{data_set_conf["name"]}_' \
-                                  f'{training_conf["method"]}_' \
-                                  f'{current_time}'
+    logdir = root_path / 'logs' / f'{configs["config_name"]}_' \
+                                  f'e{current_time}'
 
     fede_train_data, fed_test_data, train_size, test_size = federated_dataset(
         data_set_conf, data_dir)
@@ -158,6 +182,8 @@ def run_experiments(configs, root_path, data_dir=None):
 
 def main():
     # Parse arguments
+    # TODO: Add a logging system instead of prints.
+
     parser = argparse.ArgumentParser()
     parser.add_argument("config_path",
                         type=Path,
@@ -171,9 +197,19 @@ def main():
                         type=Path,
                         help="Path in which data is located. This is "
                              "required if run on Leonhard")
-    parser.add_argument("--leonhard", action='store_true',
+    parser.add_argument("--submit_leonhard", action='store_true',
                         help="Whether to submit jobs to leonhard for "
                              "grid search")
+
+    parser.add_argument("--scratch", action='store_true',
+                        help="Whether to first copy the dataset to the "
+                             "scratch storage of Leonhard. Do not use on "
+                             "other systems than Leonhard.")
+    parser.add_argument("--mem",
+                        type=int,
+                        default=4500,
+                        help="Memory allocated for each leonhard job. This "
+                             "will be ignored of Leonhard is not selected.")
 
     args = parser.parse_args()
     # Read config files
@@ -185,11 +221,17 @@ def main():
     if not args.result_dir:
         args.result_dir = Path(__file__).parent.absolute().parent
 
-    if args.leonhard:
-        submit_jobs(configs, args.result_dir, args.data_dir)
+    if args.scratch and not args.data_dir:
+        print("WARNING: You can not use scratch while not giving the "
+              "datafolder. Scratch will be ignored.")
+        args.scratch = False
+
+    if args.submit_leonhard:
+        submit_jobs(configs, args.result_dir, args.data_dir, args.mem,
+                    args.scratch)
     else:
         gpu_session(configs['session']['num_gpus'])
-        run_experiments(configs, args.result_dir, args.data_dir)
+        run_experiments(configs, args.result_dir, args.data_dir, args.scratch)
 
 
 if __name__ == "__main__":
