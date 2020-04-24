@@ -1,4 +1,6 @@
+from os import environ as os_environ
 import subprocess
+from shutil import copytree
 import datetime
 from itertools import product
 from pathlib import Path
@@ -71,7 +73,7 @@ def _gridsearch(hp_conf):
     return experiments
 
 
-def submit_jobs(configs, root_path, data_dir=None, mem=8000):
+def submit_jobs(configs, root_path, data_dir, mem=8000, use_scratch=False):
     current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     config_dir = root_path / f'temp_configs_{current_time}'
     config_dir.mkdir(exist_ok=True)
@@ -97,11 +99,20 @@ def submit_jobs(configs, root_path, data_dir=None, mem=8000):
                    f"ngpus_excl_p=1] "
                    f"python main.py --result_dir {root_path} "
                    f"--data_dir {data_dir} "
+                   f"{'--scratch ' if use_scratch else ''}"
                    f"{config_path}")
         subprocess.check_output(command.split())
 
 
-def run_experiments(configs, root_path, data_dir=None):
+def run_experiments(configs, root_path, data_dir=None, use_scratch=False):
+
+    if use_scratch:
+        dir_name = data_dir.name
+        temp_dir = Path(os_environ['TMPDIR']) / dir_name
+        print(f"Copying datafiles to the scratch folder {temp_dir}")
+        copytree(str(data_dir), str(temp_dir))
+        data_dir = temp_dir
+
     current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 
     # Configs
@@ -161,9 +172,6 @@ def run_experiments(configs, root_path, data_dir=None):
 
 def main():
     # Parse arguments
-    # TODO: Maybe using the scratch folder can fix the problem that dataset
-    #  gets removed everytime.
-
     # TODO: Add a logging system instead of prints.
 
     parser = argparse.ArgumentParser()
@@ -179,9 +187,19 @@ def main():
                         type=Path,
                         help="Path in which data is located. This is "
                              "required if run on Leonhard")
-    parser.add_argument("--leonhard", action='store_true',
+    parser.add_argument("--submit_leonhard", action='store_true',
                         help="Whether to submit jobs to leonhard for "
                              "grid search")
+
+    parser.add_argument("--scratch", action='store_true',
+                        help="Whether to first copy the dataset to the "
+                             "scratch storage of Leonhard. Do not use on "
+                             "other systems than Leonhard.")
+    parser.add_argument("--mem",
+                        type=int,
+                        default=10000,
+                        help="Memory allocated for each leonhard job. This "
+                             "will be ignored of Leonhard is not selected.")
 
     args = parser.parse_args()
     # Read config files
@@ -193,11 +211,17 @@ def main():
     if not args.result_dir:
         args.result_dir = Path(__file__).parent.absolute().parent
 
-    if args.leonhard:
-        submit_jobs(configs, args.result_dir, args.data_dir)
+    if args.scratch and not args.data_dir:
+        print("WARNING: You can not use scratch while not giving the "
+              "datafolder. Scratch will be ignored.")
+        args.scratch = False
+
+    if args.submit_leonhard:
+        submit_jobs(configs, args.result_dir, args.data_dir, args.mem,
+                    args.scratch)
     else:
         gpu_session(configs['session']['num_gpus'])
-        run_experiments(configs, args.result_dir, args.data_dir)
+        run_experiments(configs, args.result_dir, args.data_dir, args.scratch)
 
 
 if __name__ == "__main__":
