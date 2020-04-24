@@ -197,7 +197,7 @@ def main():
                              "other systems than Leonhard.")
     parser.add_argument("--mem",
                         type=int,
-                        default=10000,
+                        default=4500,
                         help="Memory allocated for each leonhard job. This "
                              "will be ignored of Leonhard is not selected.")
 
