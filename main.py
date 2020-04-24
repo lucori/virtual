@@ -19,12 +19,22 @@ from source.experiment_utils import (run_simulation,
 
 def create_hparams(hp_conf, data_set_conf, training_conf,
                    model_conf, logdir):
-
-    # TODO: add a large predefined range for the most common parameters of
-    #  grid search. This makes the tensorboard search possible.
     HP_DICT = {}
     for key_0, _ in hp_conf.items():
-        HP_DICT[key_0] = hp.HParam(key_0)
+        if (key_0 == 'learning_rate'
+                or key_0 == 'kl_weight'
+                or key_0 == 'l2_reg'):
+            HP_DICT[key_0] = hp.HParam(key_0, hp.RealInterval(0.0, 1.0))
+        elif key_0 == 'batch_size':
+            HP_DICT[key_0] = hp.HParam(key_0, hp.Discrete([1, 5, 10, 20, 40,
+                                                           64, 128, 256, 512]))
+        elif key_0 == 'epochs_per_round':
+            HP_DICT[key_0] = hp.HParam(key_0, hp.Discrete([1, 5, 10, 15, 20]))
+        elif key_0 == 'method':
+            HP_DICT[key_0] = hp.HParam(key_0, hp.Discrete(['virtual',
+                                                           'fedprox']))
+        else:
+            HP_DICT[key_0] = hp.HParam(key_0)
     for key, _ in data_set_conf.items():
         HP_DICT[f'data_{key}'] = hp.HParam(f'data_{key}')
     for key, _ in training_conf.items():
