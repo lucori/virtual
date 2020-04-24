@@ -6,8 +6,8 @@ import GPUtil
 
 
 def gpu_session(num_gpus=None, gpus=None):
+    print(gpus, tf.config.experimental.list_physical_devices('GPU'))
     if gpus:
-        print(gpus, tf.config.experimental.list_physical_devices('GPU'))
         os.environ["CUDA_VISIBLE_DEVICES"] = gpus
     elif num_gpus:
         if num_gpus > 0:
