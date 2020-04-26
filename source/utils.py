@@ -12,6 +12,7 @@ logger = logging.getLogger(ROOT_LOGGER_STR + '.' + __name__)
 
 
 def gpu_session(num_gpus=None, gpus=None):
+    print(gpus, tf.config.experimental.list_physical_devices('GPU'))
     if gpus:
         logger.info(gpus, tf.config.experimental.list_physical_devices('GPU'))
         os.environ["CUDA_VISIBLE_DEVICES"] = gpus
