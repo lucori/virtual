@@ -45,8 +45,10 @@ def _setup_logger(results_path, create_stdlog):
 
 def create_hparams(hp_conf, data_set_conf, training_conf,
                    model_conf, logdir):
+    exp_wide_keys = ["learning_rate", "l2_reg", "kl_weight", "batch_size",
+                     "epochs_per_round", "hierarchical", "prior_scale"]
     HP_DICT = {}
-    for key_0, _ in hp_conf.items():
+    for key_0 in list(hp_conf.keys()) + exp_wide_keys:
         if (key_0 == 'learning_rate'
                 or key_0 == 'kl_weight'
                 or key_0 == 'l2_reg'):
@@ -59,6 +61,8 @@ def create_hparams(hp_conf, data_set_conf, training_conf,
         elif key_0 == 'method':
             HP_DICT[key_0] = hp.HParam(key_0, hp.Discrete(['virtual',
                                                            'fedprox']))
+        elif key_0 == 'hierarchical':
+            HP_DICT[key_0] = hp.HParam(key_0, hp.Discrete(['true','false']))
         else:
             HP_DICT[key_0] = hp.HParam(key_0)
     for key, _ in data_set_conf.items():
