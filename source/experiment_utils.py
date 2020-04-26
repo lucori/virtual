@@ -1,5 +1,6 @@
 import os
 import random
+import logging
 
 import tensorflow as tf
 import tensorflow_federated as tff
@@ -22,6 +23,11 @@ from source.dense_reparametrization_shared import DenseReparametrizationShared
 from source.dense_reparametrization_shared import RNNVarReparametrized
 from source.dense_reparametrization_shared import GaussianEmbedding
 from source.dense_reparametrization_shared import LSTMCellVariational
+from source.constants import ROOT_LOGGER_STR
+
+
+logger = logging.getLogger(ROOT_LOGGER_STR + '.' + __name__)
+
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 
@@ -179,7 +185,9 @@ def run_simulation(model_fn, federated_train_data, federated_test_data, train_si
                                                             random.sample(range(dict_conf['num_clients']),
                                                                           dict_conf['clients_per_round'])])
             test_metrics = evaluation(state.model, federated_test_data)
-            print('round {:2d}, metrics_train={}, metrics_test={}'.format(round_num, metrics, test_metrics))
+            logger.info(f'round {round_num:2d}, '
+                        f'metrics_train={metrics}, '
+                        f'metrics_test={test_metrics}')
             if round_num % dict_conf['tensorboard_updates'] == 0:
                 with train_summary_writer.as_default():
                     for name, value in metrics._asdict().items():

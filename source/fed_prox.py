@@ -1,10 +1,14 @@
 import random
-
+import logging
 import tensorflow as tf
 
 from source.federated_devices import ClientSequential, ServerSequential
 from source.fed_process import FedProcess
 from source.utils import avg_dict, avg_dict_eval
+from source.constants import ROOT_LOGGER_STR
+
+
+logger = logging.getLogger(ROOT_LOGGER_STR + '.' + __name__)
 
 
 class FedProx(FedProcess):
@@ -49,7 +53,9 @@ class FedProx(FedProcess):
             test = [self.server.evaluate(test_data, verbose=0) for test_data in federated_test_data]
             avg_train = avg_dict(history_train, [train_size[client] for client in clients_sampled])
             avg_test = avg_dict_eval(test, [size/sum(test_size) for size in test_size])
-            print('round:', round, avg_train, avg_test)
+            logger.info(f'round: {round}, '
+                        f'avg_train: {avg_train}, '
+                        f'avg_test: {avg_test}')
             if round % tensorboard_updates == 0:
                 for i, key in enumerate(avg_train.keys()):
                     with self.train_summary_writer.as_default():

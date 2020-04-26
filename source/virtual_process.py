@@ -1,4 +1,5 @@
 import random
+import logging
 
 import tensorflow as tf
 
@@ -8,6 +9,10 @@ from source.federated_devices import (ClientVirtualSequential,
                                       ServerModel)
 from source.fed_process import FedProcess
 from source.utils import avg_dict
+from source.constants import ROOT_LOGGER_STR
+
+
+logger = logging.getLogger(ROOT_LOGGER_STR + '.' + __name__)
 
 
 class VirtualFedProcess(FedProcess):
@@ -66,7 +71,7 @@ class VirtualFedProcess(FedProcess):
             self.server.apply_delta(aggregated_deltas)
             avg_train = avg_dict(history_train, [train_size[client] for client in clients_sampled])
             avg_test = avg_dict(history_test, test_size)
-            print('round:', round, avg_train, avg_test)
+            logger.debug('round:', round, avg_train, avg_test)
             if round % tensorboard_updates == 0:
                 with self.train_summary_writer.as_default():
                     for key in avg_train.keys():
