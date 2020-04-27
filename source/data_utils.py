@@ -9,7 +9,7 @@ from sklearn.model_selection import train_test_split
 import tensorflow as tf
 import tensorflow_federated as tff
 from tensorflow_federated.python.simulation import hdf5_client_data
-from constants import ROOT_LOGGER_STR
+from source.constants import ROOT_LOGGER_STR
 
 logger = logging.getLogger(ROOT_LOGGER_STR + '.' + __name__)
 
