@@ -42,10 +42,10 @@ def federated_dataset(dataset_conf, data_dir=None):
 
     if name == 'femnist':
         if (data_dir
-                and (data_dir / 'fed_emnist_train.h5').is_file()
-                and (data_dir / 'fed_emnist_test.h5').is_file()):
-            train_file = data_dir / 'fed_emnist_train.h5'
-            test_file = data_dir / 'fed_emnist_test.h5'
+                and (data_dir / 'datasets' / 'fed_emnist_train.h5').is_file()
+                and (data_dir / 'datasets' / 'fed_emnist_test.h5').is_file()):
+            train_file = data_dir / 'datasets' / 'fed_emnist_train.h5'
+            test_file = data_dir / 'datasets' / 'fed_emnist_test.h5'
 
             logger.debug(f"Data already exists, loading from {data_dir}")
             emnist_train = hdf5_client_data.HDF5ClientData(train_file)
@@ -112,8 +112,8 @@ def data_split(x, y, test_size=0.25):
 
 
 def mnist_preprocess(data_dir=None):
-    if data_dir and (data_dir / 'mnist.npz').is_file():
-        file_path = data_dir / 'mnist.npz'
+    if data_dir and (data_dir / 'datasets' / 'mnist.npz').is_file():
+        file_path = data_dir / 'datasets' / 'mnist.npz'
 
         logger.debug(f"Data already exists, loading from {data_dir}")
         with np.load(file_path  , allow_pickle=True) as f:
@@ -313,8 +313,8 @@ def shakspeare(num_clients=-1, seq_lenght=80, data_dir=None):
     def data(client, source):
         return postprocess(preprocess(source.create_tf_dataset_for_client(client)))
 
-    train_file = data_dir / 'shakespeare_train.h5'
-    test_file = data_dir / 'shakespeare_test.h5'
+    train_file = data_dir / 'datasets' / 'shakespeare_train.h5'
+    test_file = data_dir / 'datasets' / 'shakespeare_test.h5'
     if data_dir and train_file.is_file() and test_file.is_file():
         logger.debug(f"Data already exists, loading from {data_dir}")
         train_data = hdf5_client_data.HDF5ClientData(train_file)
