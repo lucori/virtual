@@ -232,8 +232,6 @@ def run_experiments(configs, root_path, data_dir=None, use_scratch=False):
 
 def main():
     # Parse arguments
-    # TODO: do not use the keras load for femnist and shakespear to avoir
-    #  removing data.
 
     parser = argparse.ArgumentParser()
     parser.add_argument("config_path",

@@ -1,4 +1,5 @@
 import os
+import logging
 from pathlib import Path
 import zipfile
 
@@ -7,6 +8,10 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 import tensorflow as tf
 import tensorflow_federated as tff
+from tensorflow_federated.python.simulation import hdf5_client_data
+
+
+logger = logging.getLogger(ROOT_LOGGER_STR + '.' + __name__)
 
 
 SHUFFLE_BUFFER = 500
@@ -22,7 +27,7 @@ def federated_dataset(dataset_conf, data_dir=None):
     name = dataset_conf['name']
     num_clients = dataset_conf['num_clients']
     if name == 'mnist':
-        x_train, y_train, x_test, y_test = mnist_preprocess()
+        x_train, y_train, x_test, y_test = mnist_preprocess(data_dir)
         x_train = np.split(x_train, num_clients)
         y_train = np.split(y_train, num_clients)
         x_test = np.split(x_test, num_clients)
@@ -36,8 +41,18 @@ def federated_dataset(dataset_conf, data_dir=None):
         test_size = [x.shape[0] for x in x_test]
 
     if name == 'femnist':
-        emnist_train, emnist_test = \
-            tff.simulation.datasets.emnist.load_data(cache_dir=data_dir)
+        if (data_dir
+                and (data_dir / 'fed_emnist_train.h5').is_file()
+                and (data_dir / 'fed_emnist_test.h5').is_file()):
+            train_file = data_dir / 'fed_emnist_train.h5'
+            test_file = data_dir / 'fed_emnist_test.h5'
+
+            logger.debug(f"Data already exists, loading from {data_dir}")
+            emnist_train = hdf5_client_data.HDF5ClientData(train_file)
+            emnist_test = hdf5_client_data.HDF5ClientData(test_file)
+        else:
+            emnist_train, emnist_test = tff.simulation.datasets.emnist.\
+                load_data(cache_dir=data_dir)
         post_shape = [-1]
         if 'shape' in dataset_conf:
             post_shape = dataset_conf['shape']
@@ -96,9 +111,17 @@ def data_split(x, y, test_size=0.25):
     return x, y, x_t, y_t
 
 
-def mnist_preprocess():
-    (x_train, y_train), (x_test, y_test) = \
-        tf.keras.datasets.mnist.load_data()
+def mnist_preprocess(data_dir=None):
+    if data_dir and (data_dir / 'mnist.npz').is_file():
+        file_path = data_dir / 'mnist.npz'
+
+        logger.debug(f"Data already exists, loading from {data_dir}")
+        with np.load(file_path  , allow_pickle=True) as f:
+            x_train, y_train = f['x_train'], f['y_train']
+            x_test, y_test = f['x_test'], f['y_test']
+    else:
+        (x_train, y_train), (x_test, y_test) = \
+            tf.keras.datasets.mnist.load_data()
     x_train = x_train.reshape((-1, 784))
     x_test = x_test.reshape((-1, 784))
     x_train = x_train.astype('float32')
@@ -290,8 +313,15 @@ def shakspeare(num_clients=-1, seq_lenght=80, data_dir=None):
     def data(client, source):
         return postprocess(preprocess(source.create_tf_dataset_for_client(client)))
 
-    train_data, test_data = tff.simulation.datasets.shakespeare.load_data(
-        cache_dir=data_dir)
+    train_file = data_dir / 'shakespeare_train.h5'
+    test_file = data_dir / 'shakespeare_test.h5'
+    if data_dir and train_file.is_file() and test_file.is_file():
+        logger.debug(f"Data already exists, loading from {data_dir}")
+        train_data = hdf5_client_data.HDF5ClientData(train_file)
+        test_data = hdf5_client_data.HDF5ClientData(test_file)
+    else:
+        train_data, test_data = tff.simulation.datasets.shakespeare.load_data(
+            cache_dir=data_dir)
     indx = [8, 11, 12, 17, 26, 32, 34, 43, 45, 66, 68, 72, 73,
             85, 92, 93, 98, 105, 106, 108, 110, 130, 132, 143, 150, 153,
             156, 158, 165, 169, 185, 187, 191, 199, 207, 212, 219, 227, 235,
