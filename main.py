@@ -194,8 +194,8 @@ def run_experiments(configs, root_path, data_dir=None, use_scratch=False):
     for session_num, exp_conf in enumerate(experiments):
         all_params = {**data_set_conf, **training_conf, **model_conf,
                       **exp_conf}
-        training_conf['num_rounds'] = all_params['tot_epochs_per_client'] / \
-                                      (all_params['clients_per_round']*all_params['epochs_per_round'])
+        training_conf['num_rounds'] = int(all_params['tot_epochs_per_client'] / \
+                                      (all_params['clients_per_round']*all_params['epochs_per_round']))
         all_params['num_rounds'] = training_conf['num_rounds']
         seq_length = data_set_conf.get('seq_length', None)
         federated_train_data_batched = [
