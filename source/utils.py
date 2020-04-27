@@ -1,13 +1,20 @@
 import os
+import logging
 
 import tensorflow as tf
 import numpy as np
 import GPUtil
 
+from source.constants import ROOT_LOGGER_STR
+
+
+logger = logging.getLogger(ROOT_LOGGER_STR + '.' + __name__)
+
 
 def gpu_session(num_gpus=None, gpus=None):
     print(gpus, tf.config.experimental.list_physical_devices('GPU'))
     if gpus:
+        logger.info(gpus, tf.config.experimental.list_physical_devices('GPU'))
         os.environ["CUDA_VISIBLE_DEVICES"] = gpus
     elif num_gpus:
         if num_gpus > 0:
@@ -18,9 +25,11 @@ def gpu_session(num_gpus=None, gpus=None):
         os.environ["CUDA_VISIBLE_DEVICES"] = ''
     num_gpus = len(os.environ["CUDA_VISIBLE_DEVICES"])
     gpus = os.environ["CUDA_VISIBLE_DEVICES"]
-    print(f'Cuda devices: {gpus}') if gpus else print('No Cuda devices')
+    logger.info(f'Cuda devices: {gpus}') if gpus else \
+        logger.info('No Cuda devices')
+
     if gpus or num_gpus > 0:
-        print(gpus, tf.config.experimental.list_physical_devices('GPU'))
+        logger.info(gpus, tf.config.experimental.list_physical_devices('GPU'))
         gpus = [tf.config.experimental.list_physical_devices('GPU')[int(gpu)] for gpu in gpus]
         tf.config.experimental.set_visible_devices(gpus, 'GPU')
         tf.config.set_soft_device_placement(True)

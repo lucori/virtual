@@ -1,10 +1,12 @@
 from os import environ as os_environ
+import sys
 import subprocess
 from shutil import copytree
 import datetime
 from itertools import product
 from pathlib import Path
 import argparse
+import logging
 
 import tensorflow as tf
 from tensorboard.plugins.hparams import api as hp
@@ -15,12 +17,38 @@ from source.data_utils import federated_dataset, batch_dataset
 from source.utils import gpu_session
 from source.experiment_utils import (run_simulation,
                                      get_compiled_model_fn_from_dict)
+from source.constants import ROOT_LOGGER_STR, LOGGER_RESULT_FILE
+
+
+logger = logging.getLogger(ROOT_LOGGER_STR + '.' + __name__)
+
+
+def _setup_logger(results_path, create_stdlog):
+    """Setup a general logger which saves all logs in the experiment folder"""
+
+    f_format = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    f_handler = logging.FileHandler(str(results_path))
+    f_handler.setLevel(logging.DEBUG)
+    f_handler.setFormatter(f_format)
+
+    root_logger = logging.getLogger(ROOT_LOGGER_STR)
+    root_logger.handlers = []
+    root_logger.setLevel(logging.DEBUG)
+    root_logger.addHandler(f_handler)
+
+    if create_stdlog:
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setLevel(logging.INFO)
+        root_logger.addHandler(handler)
 
 
 def create_hparams(hp_conf, data_set_conf, training_conf,
                    model_conf, logdir):
+    exp_wide_keys = ["learning_rate", "l2_reg", "kl_weight", "batch_size",
+                     "epochs_per_round", "hierarchical", "prior_scale"]
     HP_DICT = {}
-    for key_0, _ in hp_conf.items():
+    for key_0 in list(hp_conf.keys()) + exp_wide_keys:
         if (key_0 == 'learning_rate'
                 or key_0 == 'kl_weight'
                 or key_0 == 'l2_reg'):
@@ -36,6 +64,8 @@ def create_hparams(hp_conf, data_set_conf, training_conf,
         elif key_0 == 'method':
             HP_DICT[key_0] = hp.HParam(key_0, hp.Discrete(['virtual',
                                                            'fedprox']))
+        elif key_0 == 'hierarchical':
+            HP_DICT[key_0] = hp.HParam(key_0, hp.Discrete(['true','false']))
         else:
             HP_DICT[key_0] = hp.HParam(key_0)
     for key, _ in data_set_conf.items():
@@ -123,7 +153,7 @@ def run_experiments(configs, root_path, data_dir=None, use_scratch=False):
     if use_scratch:
         dir_name = data_dir.name
         temp_dir = Path(os_environ['TMPDIR']) / dir_name
-        print(f"Copying datafiles to the scratch folder {temp_dir}")
+        logger.info(f"Copying datafiles to the scratch folder {temp_dir}")
         copytree(str(data_dir), str(temp_dir))
         data_dir = temp_dir
 
@@ -139,6 +169,9 @@ def run_experiments(configs, root_path, data_dir=None, use_scratch=False):
 
     logdir = root_path / 'logs' / f'{configs["config_name"]}_' \
                                   f'e{current_time}'
+    logdir.mkdir()
+    logfile = logdir / LOGGER_RESULT_FILE
+    _setup_logger(logfile, create_stdlog=True)
 
     fede_train_data, fed_test_data, train_size, test_size = federated_dataset(
         data_set_conf, data_dir)
@@ -171,14 +204,15 @@ def run_experiments(configs, root_path, data_dir=None, use_scratch=False):
             lambda x: x.numpy(), iter(federated_train_data_batched[0]).next())
 
         logdir_run = logdir / f'{session_num}_{current_time}'
-        print(f"saving results in {logdir_run}")
+        logger.info(f"saving results in {logdir_run}")
         write_hparams(HP_DICT, session_num, exp_conf, data_set_conf,
                       training_conf, model_conf, logdir_run, configs[
                           'config_name'])
         with open(logdir_run / 'config.json', 'w') as config_file:
             json.dump(configs, config_file, indent=4)
 
-        print(f'Starting run {session_num} with parameters {all_params}...')
+        logger.info(f'Starting run {session_num} '
+                    f'with parameters {all_params}...')
         model_fn = get_compiled_model_fn_from_dict(all_params, sample_batch)
         run_simulation(model_fn, federated_train_data_batched,
                        federated_test_data_batched, train_size, test_size,
@@ -189,7 +223,8 @@ def run_experiments(configs, root_path, data_dir=None, use_scratch=False):
 
 def main():
     # Parse arguments
-    # TODO: Add a logging system instead of prints.
+    # TODO: do not use the keras load for femnist and shakespear to avoir
+    #  removing data.
 
     parser = argparse.ArgumentParser()
     parser.add_argument("config_path",
@@ -229,8 +264,8 @@ def main():
         args.result_dir = Path(__file__).parent.absolute().parent
 
     if args.scratch and not args.data_dir:
-        print("WARNING: You can not use scratch while not giving the "
-              "datafolder. Scratch will be ignored.")
+        logger.warning("WARNING: You can not use scratch while not giving the "
+                       "datafolder. Scratch will be ignored.")
         args.scratch = False
 
     if args.submit_leonhard:
