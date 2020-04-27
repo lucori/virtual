@@ -76,7 +76,7 @@ def create_hparams(hp_conf, data_set_conf, training_conf,
         HP_DICT[f'model_{key}'] = hp.HParam(f'model_{key}')
     HP_DICT['run'] = hp.HParam('run')
     HP_DICT['config_name'] = hp.HParam('config_name')
-    HP_DICT['num_rounds'] = hp.HParam('num_rounds', hp.RealInterval(0.0, 1e10))
+    HP_DICT['training_num_rounds'] = hp.HParam('num_rounds', hp.RealInterval(0.0, 1e10))
 
     metrics = [hp.Metric('sparse_categorical_accuracy',
                          display_name='Accuracy')]
