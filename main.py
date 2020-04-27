@@ -69,7 +69,16 @@ def create_hparams(hp_conf, data_set_conf, training_conf,
         else:
             HP_DICT[key_0] = hp.HParam(key_0)
     for key, _ in data_set_conf.items():
-        HP_DICT[f'data_{key}'] = hp.HParam(f'data_{key}')
+        if key == 'name':
+            HP_DICT[f'data_{key}'] = hp.HParam(f'data_{key}',
+                                               hp.Discrete(['mnist',
+                                                            'pmnist',
+                                                            'femnist',
+                                                            'shakespeare',
+                                                            'human_activity',
+                                                            'vehicle_sensor']))
+        else:
+            HP_DICT[f'data_{key}'] = hp.HParam(f'data_{key}')
     for key, _ in training_conf.items():
         HP_DICT[f'training_{key}'] = hp.HParam(f'training_{key}')
     for key, _ in model_conf.items():
