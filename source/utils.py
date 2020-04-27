@@ -13,6 +13,7 @@ def gpu_session(num_gpus=None, gpus=None):
         if num_gpus > 0:
             os.environ["CUDA_DEVICE_ORDER"] = 'PCI_BUS_ID'
             os.environ["CUDA_VISIBLE_DEVICES"] = set_free_gpus(num_gpus)
+            print('visible devices:', os.environ["CUDA_VISIBLE_DEVICES"])
     else:
         os.environ["CUDA_VISIBLE_DEVICES"] = ''
     num_gpus = len(os.environ["CUDA_VISIBLE_DEVICES"])

@@ -26,10 +26,13 @@ def create_hparams(hp_conf, data_set_conf, training_conf,
                 or key_0 == 'l2_reg'):
             HP_DICT[key_0] = hp.HParam(key_0, hp.RealInterval(0.0, 1.0))
         elif key_0 == 'batch_size':
-            HP_DICT[key_0] = hp.HParam(key_0, hp.Discrete([1, 5, 10, 20, 40,
+            HP_DICT[key_0] = hp.HParam(key_0, hp.Discrete([1, 5, 10, 20, 40, 50,
                                                            64, 128, 256, 512]))
         elif key_0 == 'epochs_per_round':
-            HP_DICT[key_0] = hp.HParam(key_0, hp.Discrete([1, 5, 10, 15, 20]))
+            HP_DICT[key_0] = hp.HParam(key_0, hp.Discrete([1, 5, 10, 15, 20, 50]))
+        elif key_0 == 'clients_per_round':
+            HP_DICT[key_0] = hp.HParam(key_0, hp.Discrete([1, 2, 3, 4, 5,
+                                                           10, 15, 20, 50]))
         elif key_0 == 'method':
             HP_DICT[key_0] = hp.HParam(key_0, hp.Discrete(['virtual',
                                                            'fedprox']))
@@ -43,6 +46,7 @@ def create_hparams(hp_conf, data_set_conf, training_conf,
         HP_DICT[f'model_{key}'] = hp.HParam(f'model_{key}')
     HP_DICT['run'] = hp.HParam('run')
     HP_DICT['config_name'] = hp.HParam('config_name')
+    HP_DICT['num_rounds'] = hp.HParam('num_rounds', hp.RealInterval(0.0, 1e10))
 
     metrics = [hp.Metric('sparse_categorical_accuracy',
                          display_name='Accuracy')]
@@ -132,6 +136,7 @@ def run_experiments(configs, root_path, data_dir=None, use_scratch=False):
     hp_conf = configs['hp']
     if 'input_shape' in model_conf:
         model_conf['input_shape'] = tuple(model_conf['input_shape'])
+
     logdir = root_path / 'logs' / f'{configs["config_name"]}_' \
                                   f'e{current_time}'
 
@@ -147,7 +152,9 @@ def run_experiments(configs, root_path, data_dir=None, use_scratch=False):
     for session_num, exp_conf in enumerate(experiments):
         all_params = {**data_set_conf, **training_conf, **model_conf,
                       **exp_conf}
-
+        training_conf['num_rounds'] = all_params['tot_epochs_per_client'] / \
+                                      (all_params['clients_per_round']*all_params['epochs_per_round'])
+        all_params['num_rounds'] = training_conf['num_rounds']
         seq_length = data_set_conf.get('seq_length', None)
         federated_train_data_batched = [
             batch_dataset(data, all_params['batch_size'],
