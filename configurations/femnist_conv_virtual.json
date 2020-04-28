@@ -4,17 +4,16 @@
     },
     "data_set_conf":{
         "name": "femnist",
-        "num_clients": 1,
+        "num_clients": 100,
         "shape": [1, 28, 28]
     },
     "training_conf": {"method": "virtual",
-                     "num_rounds": 5000,
-                     "clients_per_round": 5,
+                     "tot_epochs_per_client": 5000,
+                      "clients_per_round": 5,
                      "optimizer": "adam",
                      "fed_avg_init": false,
                      "tensorboard_updates": 1,
-                     "damping_factor": 1.0,
-                     "kl_weight": 0.0001
+                     "damping_factor": 1.0
     },
    "model_conf": {"layers": [{"name": "Conv2DVirtual",
                               "input_shape": [1, 28, 28],
@@ -59,7 +58,8 @@
                   "prior_scale": 1.0
    },
    "hp": {"epochs_per_round": [5],
-         "learning_rate": [0.1, 0.01, 0.005],
-         "batch_size": [20]
+          "learning_rate": [0.1, 0.01, 0.001, 0.0001],
+          "batch_size": [20, 30],
+          "kl_weight": [0.1, 0.001, 0.0001]
    }
 }
