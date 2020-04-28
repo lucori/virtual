@@ -104,7 +104,10 @@ def write_hparams(hp_dict, session_num, exp_conf, data_set_conf,
     for key_1, value_1 in data_set_conf.items():
         hparams[hp_dict[f'data_{key_1}']] = str(value_1)
     for key_2, value_2 in training_conf.items():
-        hparams[hp_dict[f'training_{key_2}']] = str(value_2)
+        if key_2 == 'num_rounds':
+            hparams[hp_dict[f'training_{key_2}']] = value_2
+        else:
+            hparams[hp_dict[f'training_{key_2}']] = str(value_2)
     for key_3, value_3 in model_conf.items():
         if key_3 == 'layers':
             continue
@@ -178,7 +181,7 @@ def run_experiments(configs, root_path, data_dir=None, use_scratch=False):
 
     logdir = root_path / 'logs' / f'{configs["config_name"]}_' \
                                   f'e{current_time}'
-    logdir.mkdir()
+    logdir.mkdir(parents=True)
     logfile = logdir / LOGGER_RESULT_FILE
     _setup_logger(logfile, create_stdlog=True)
 
@@ -192,10 +195,14 @@ def run_experiments(configs, root_path, data_dir=None, use_scratch=False):
 
     experiments = _gridsearch(hp_conf)
     for session_num, exp_conf in enumerate(experiments):
-        all_params = {**data_set_conf, **training_conf, **model_conf,
-                      **exp_conf}
-        training_conf['num_rounds'] = int(all_params['tot_epochs_per_client'] / \
-                                      (all_params['clients_per_round']*all_params['epochs_per_round']))
+        all_params = {**data_set_conf, **training_conf,
+                      **model_conf, **exp_conf}
+
+        training_conf['num_rounds'] = \
+            int(all_params['tot_epochs_per_client']
+                / (all_params['clients_per_round']
+                   * all_params['epochs_per_round']))
+
         all_params['num_rounds'] = training_conf['num_rounds']
         seq_length = data_set_conf.get('seq_length', None)
         federated_train_data_batched = [
@@ -268,7 +275,7 @@ def main():
             replace(args.config_path.suffix, "")
 
     if not args.result_dir:
-        args.result_dir = Path(__file__).parent.absolute().parent
+        args.result_dir = Path(__file__).parent.absolute()
 
     if args.scratch and not args.data_dir:
         logger.warning("WARNING: You can not use scratch while not giving the "
