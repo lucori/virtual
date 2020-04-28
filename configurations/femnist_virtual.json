@@ -7,7 +7,7 @@
         "num_clients": 100
     },
     "training_conf": {"method": "virtual",
-                     "tot_epochs_per_client:": 125000,
+                     "tot_epochs_per_client": 127007,
                      "optimizer": "adam",
                      "fed_avg_init": false,
                      "tensorboard_updates": 1,
@@ -35,7 +35,7 @@
               "prior_scale": 1.0
    },
    "hp": {"epochs_per_round": [1, 5, 20, 50],
-         "learning_rate": [0.00001, 0.0005, 0.001, 0.005, 0.01],
+         "learning_rate": [0.0005, 0.001, 0.005, 0.01],
          "batch_size": [10, 50],
          "clients_per_round": [5, 20],
          "hierarchical": [true, false]
