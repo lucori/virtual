@@ -72,7 +72,9 @@ class VirtualFedProcess(FedProcess):
             self.server.apply_delta(aggregated_deltas)
             avg_train = avg_dict(history_train, [train_size[client] for client in clients_sampled])
             avg_test = avg_dict(history_test, test_size)
-            logger.debug('round:', round, avg_train, avg_test)
+            logger.debug(f"round: {round}, "
+                         f"avg_train: {avg_train}, "
+                         f"avg_test: {avg_test}")
             if round % tensorboard_updates == 0:
                 with self.train_summary_writer.as_default():
                     for key in avg_train.keys():
