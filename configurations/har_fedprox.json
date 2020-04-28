@@ -7,7 +7,7 @@
         "num_clients": -1
     },
     "training_conf": {"method": "fedprox",
-                     "num_rounds": 3000,
+                     "tot_epochs_per_client": 3000,
                      "clients_per_round": 5,
                      "optimizer": "adam",
                      "tensorboard_updates": 1

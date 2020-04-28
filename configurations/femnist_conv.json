@@ -8,7 +8,7 @@
         "shape": [1, 28, 28]
     },
     "training_conf": {"method": "fedprox",
-                     "num_rounds": 5000,
+                     "tot_epochs_per_client": 5000,
                      "clients_per_round": 5,
                      "optimizer": "adam",
                      "tensorboard_updates": 1

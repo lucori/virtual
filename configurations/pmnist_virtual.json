@@ -7,7 +7,7 @@
         "num_clients": 100
     },
     "training_conf": {"method": "virtual",
-                     "num_rounds": 2000,
+                     "tot_epochs_per_client": 2000,
                      "clients_per_round": 5,
                      "optimizer": "adam",
                      "fed_avg_init": false,

@@ -9,7 +9,7 @@
         "vocab_size": 86
     },
     "training_conf": {"method": "fedprox",
-                     "num_rounds": 500,
+                     "tot_epochs_per_client": 500,
                      "clients_per_round": 5,
                      "optimizer": "adam",
                      "fed_avg_init": false,

@@ -3,3 +3,4 @@ logs/
 configurations/
 data/
 __pycache__/
+.DS_Store
