@@ -262,6 +262,7 @@ def main():
                              "located")
     parser.add_argument("--data_dir",
                         type=Path,
+                        default=Path('data'),
                         help="Path in which data is located. This is "
                              "required if run on Leonhard")
     parser.add_argument("--submit_leonhard", action='store_true',
@@ -288,10 +289,10 @@ def main():
     if not args.result_dir:
         args.result_dir = Path(__file__).parent.absolute()
 
-    if args.scratch and not args.data_dir:
-        logger.warning("WARNING: You can not use scratch while not giving the "
-                       "datafolder. Scratch will be ignored.")
-        args.scratch = False
+    if args.scratch and args.data_dir == Path('data'):
+        logger.warning("WARNING: You can not use scratch while not on "
+                       "Leonhard. Make sure you understand what you are "
+                       "doing.")
 
     if args.submit_leonhard:
         submit_jobs(configs, args.result_dir, args.data_dir, args.mem,
