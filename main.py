@@ -245,6 +245,8 @@ def run_experiments(configs, root_path, data_dir=None, use_scratch=False):
         tf.keras.backend.clear_session()
         gc.collect()
 
+        logger.info("Finished experiment successfully")
+
 
 def main():
     # Parse arguments
