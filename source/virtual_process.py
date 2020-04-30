@@ -48,6 +48,8 @@ class VirtualFedProcess(FedProcess):
         self.build(train_size, hierarchical)
 
         history_test = [None] * len(self.clients)
+        max_accuracy = -1.0
+        max_acc_round = None
         for round_i in range(num_rounds):
 
             deltas = []
@@ -86,9 +88,17 @@ class VirtualFedProcess(FedProcess):
                                  [train_size[client]
                                   for client in clients_sampled])
             avg_test = avg_dict(history_test, test_size)
+
+            if avg_test['sparse_categorical_accuracy'] > max_accuracy:
+                max_accuracy = avg_test['sparse_categorical_accuracy']
+                max_acc_round = round_i
+
             logger.debug(f"round: {round_i}, "
                          f"avg_train: {avg_train}, "
-                         f"avg_test: {avg_test}")
+                         f"avg_test: {avg_test},"
+                         f"max accuracy so far: {max_accuracy} reached at "
+                         f"round {max_acc_round}")
+
             if round_i % tensorboard_updates == 0:
                 with self.train_summary_writer.as_default():
                     for key in avg_train.keys():
@@ -96,6 +106,8 @@ class VirtualFedProcess(FedProcess):
                 with self.test_summary_writer.as_default():
                     for key in avg_test.keys():
                         tf.summary.scalar(key, avg_test[key], step=round_i)
+                    tf.summary.scalar('max_sparse_categorical_accuracy',
+                                      max_accuracy, step=round_i)
 
         for i, client in enumerate(self.clients):
             client.save_weights(str(logdir / f'weights_{i}.h5'))

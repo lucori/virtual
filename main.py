@@ -89,7 +89,9 @@ def create_hparams(hp_conf, data_set_conf, training_conf,
                                                hp.RealInterval(0.0, 1e10))
 
     metrics = [hp.Metric('sparse_categorical_accuracy',
-                         display_name='Accuracy')]
+                         display_name='Accuracy'),
+               hp.Metric('max_sparse_categorical_accuracy',
+                         display_name='Max Accuracy')]
     with tf.summary.create_file_writer(str(logdir)).as_default():
         hp.hparams_config(hparams=HP_DICT.values(),
                           metrics=metrics)

@@ -35,7 +35,8 @@ class FedProx(FedProcess):
         self.test_summary_writer = tf.summary.create_file_writer(str(logdir))
 
         self.build()
-
+        max_accuracy = -1.0
+        max_acc_round = None
         for round_i in range(num_rounds):
 
             deltas = []
@@ -70,12 +71,23 @@ class FedProx(FedProcess):
                                   for client in clients_sampled])
             avg_test = avg_dict_eval(test, [size/sum(test_size)
                                             for size in test_size])
-            logger.info(f'round: {round_i}, '
-                        f'avg_train: {avg_train}, '
-                        f'avg_test: {avg_test}')
+
+            if avg_test[1] > max_accuracy:  # Suppose 1st index is the test acc
+                max_accuracy = avg_test[1]
+                max_acc_round = round_i
+
+            logger.info(f"round: {round_i}, "
+                        f"avg_train: {avg_train}, "
+                        f"avg_test: {avg_test}, "
+                        f"max accuracy so far: {max_accuracy} reached at "
+                        f"round {max_acc_round}")
             if round_i % tensorboard_updates == 0:
                 for i, key in enumerate(avg_train.keys()):
                     with self.train_summary_writer.as_default():
                         tf.summary.scalar(key, avg_train[key], step=round_i)
                     with self.test_summary_writer.as_default():
                         tf.summary.scalar(key, avg_test[i], step=round_i)
+
+                with self.test_summary_writer.as_default():
+                    tf.summary.scalar('max_sparse_categorical_accuracy',
+                                      max_accuracy, step=round_i)
