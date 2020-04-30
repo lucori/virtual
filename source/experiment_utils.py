@@ -117,23 +117,46 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
         for layer_params in dict_conf['layers']:
             layer_params = dict(layer_params)
             layer_class = globals()[layer_params['name']]
-            args_client = {}
-            args_server = {}
+            layer_params.pop('name')
+
+            kernel_divergence_fn = (lambda q, p, ignore:
+                                    dict_conf['kl_weight']
+                                    * kl_lib.kl_divergence(q, p)
+                                    / float(train_size))
             if issubclass(layer_class, DenseShared):
-                kernel_divergence_fn = (
-                    lambda q, p, ignore: dict_conf['kl_weight'] * kl_lib.kl_divergence(q, p) / float(train_size))
-                args_server['kernel_divergence_fn'] = kernel_divergence_fn
-                args_server['num_clients'] = dict_conf['num_clients']
-                args_server['prior_scale'] = dict_conf['prior_scale']
-                args_server['activation'] = layer_params['activation']
+                server_params = dict(layer_params)
+                server_params['kernel_divergence_fn'] = kernel_divergence_fn
+                server_params['num_clients'] = dict_conf['num_clients']
+                server_params['prior_scale'] = dict_conf['prior_scale']
 
-                args_client['activation'] = 'linear'
-                args_client['kernel_divergence_fn'] = kernel_divergence_fn
+                client_params = dict(layer_params)
+                client_params['kernel_divergence_fn'] = kernel_divergence_fn
+                client_params['activation'] = 'linear'
 
-                client_path = tfp.layers.DenseReparameterization(layer_params['units'], **args_client)(client_path)
-                server_path = layer_class(layer_params['units'], **args_server)(server_path)
-                client_path = tf.keras.layers.Activation(activation=layer_params['activation'])(tf.keras.layers.Add()(
-                    [Gate()(client_path), server_path]))
+                client_path = tfp.layers.DenseReparameterization(
+                    **client_params)(client_path)
+                server_path = layer_class(**server_params)(server_path)
+                client_path = tf.keras.layers.Activation(
+                    activation=layer_params['activation'])(
+                    tf.keras.layers.Add()([Gate()(client_path), server_path]))
+
+            elif isinstance(layer_class, Conv2DVirtual):
+
+                client_params = dict(layer_params)
+                client_params['kernel_divergence_fn'] = kernel_divergence_fn
+                client_params['activation'] = 'linear'
+                client_path = tfp.layers.Convolution2DReparameterization(
+                    **client_params)(client_path)
+
+                server_params = dict(layer_params)
+                server_params['kernel_divergence_fn'] = kernel_divergence_fn
+                server_params['num_clients'] = dict_conf['num_clients']
+                server_params['prior_scale'] = dict_conf['prior_scale']
+                server_path = layer_class(**server_params)(server_path)
+
+                client_path = tf.keras.layers.Activation(
+                    activation=layer_params['activation'])(
+                    tf.keras.layers.Add()([Gate()(client_path), server_path]))
             else:
                 client_path = layer_class(**layer_params)(client_path)
                 server_path = layer_class(**layer_params)(server_path)
