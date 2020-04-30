@@ -162,21 +162,24 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
     return model_fn
 
 
-def run_simulation(model_fn, federated_train_data, federated_test_data, train_size, test_size, dict_conf, logdir):
-    if dict_conf['method'] == 'virtual':
-        virtual_process = VirtualFedProcess(model_fn, dict_conf['num_clients'],
-                                            damping_factor=dict_conf['damping_factor'],
-                                            fed_avg_init=dict_conf['fed_avg_init'])
-        virtual_process.fit(federated_train_data, dict_conf['num_rounds'], dict_conf['clients_per_round'],
-                            dict_conf['epochs_per_round'], train_size=train_size, test_size=test_size,
+def run_simulation(model_fn, federated_train_data, federated_test_data,
+                   train_size, test_size, cfgs, logdir):
+    if cfgs['method'] == 'virtual':
+        virtual_process = VirtualFedProcess(model_fn, cfgs['num_clients'],
+                                            damping_factor=cfgs['damping_factor'],
+                                            fed_avg_init=cfgs['fed_avg_init'])
+        virtual_process.fit(federated_train_data, cfgs['num_rounds'],
+                            cfgs['clients_per_round'],
+                            cfgs['epochs_per_round'],
+                            train_size=train_size, test_size=test_size,
                             federated_test_data=federated_test_data,
-                            tensorboard_updates=dict_conf['tensorboard_updates'],
-                            logdir=logdir, hierarchical=dict_conf['hierarchical'])
+                            tensorboard_updates=cfgs['tensorboard_updates'],
+                            logdir=logdir, hierarchical=cfgs['hierarchical'])
         tf.keras.backend.clear_session()
         del virtual_process
         gc.collect()
-    elif dict_conf['method'] == 'fedavg':
-        train_log_dir = logdir + '/train'
+    elif cfgs['method'] == 'fedavg':
+        train_log_dir = logdir / 'train'
         train_summary_writer = tf.summary.create_file_writer(train_log_dir)
         test_summary_writer = tf.summary.create_file_writer(logdir)
 
@@ -185,15 +188,17 @@ def run_simulation(model_fn, federated_train_data, federated_test_data, train_si
         evaluation = tff.learning.build_federated_evaluation(model_fn)
         state = iterative_process.initialize()
 
-        for round_num in range(dict_conf['num_rounds']):
-            state, metrics = iterative_process.next(state, [federated_train_data[indx] for indx in
-                                                            random.sample(range(dict_conf['num_clients']),
-                                                                          dict_conf['clients_per_round'])])
+        for round_num in range(cfgs['num_rounds']):
+            state, metrics = iterative_process.next(
+                state,
+                [federated_train_data[indx]
+                 for indx in random.sample(range(cfgs['num_clients']),
+                                           cfgs['clients_per_round'])])
             test_metrics = evaluation(state.model, federated_test_data)
             logger.info(f'round {round_num:2d}, '
                         f'metrics_train={metrics}, '
                         f'metrics_test={test_metrics}')
-            if round_num % dict_conf['tensorboard_updates'] == 0:
+            if round_num % cfgs['tensorboard_updates'] == 0:
                 with train_summary_writer.as_default():
                     for name, value in metrics._asdict().items():
                         tf.summary.scalar(name, value, step=round_num)
@@ -201,13 +206,15 @@ def run_simulation(model_fn, federated_train_data, federated_test_data, train_si
                     for name, value in test_metrics._asdict().items():
                         tf.summary.scalar(name, value, step=round_num)
 
-    elif dict_conf['method'] == 'fedprox':
-        fed_prox_process = FedProx(model_fn, dict_conf['num_clients'])
-        fed_prox_process.fit(federated_train_data, dict_conf['num_rounds'], dict_conf['clients_per_round'],
-                            dict_conf['epochs_per_round'], train_size=train_size, test_size=test_size,
-                            federated_test_data=federated_test_data,
-                            tensorboard_updates=dict_conf['tensorboard_updates'],
-                            logdir=logdir)
+    elif cfgs['method'] == 'fedprox':
+        fed_prox_process = FedProx(model_fn, cfgs['num_clients'])
+        fed_prox_process.fit(federated_train_data, cfgs['num_rounds'],
+                             cfgs['clients_per_round'],
+                             cfgs['epochs_per_round'],
+                             train_size=train_size, test_size=test_size,
+                             federated_test_data=federated_test_data,
+                             tensorboard_updates=cfgs['tensorboard_updates'],
+                             logdir=logdir)
         tf.keras.backend.clear_session()
         del fed_prox_process
         gc.collect()
