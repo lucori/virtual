@@ -32,8 +32,7 @@
                             }
                             ],
                 "hierarchical": false,
-                "prior_scale": 1.0,
-                "l2_reg": 0.0
+                "prior_scale": 1.0
    },
    "hp": {"epochs_per_round": [1],
          "learning_rate": [0.015, 0.017],
