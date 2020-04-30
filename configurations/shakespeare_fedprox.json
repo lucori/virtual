@@ -29,7 +29,8 @@
                               "units": 87,
                               "activation": "softmax"
                             }
-                            ]
+                            ],
+                "architecture": "rnn"
    },
    "hp": {"epochs_per_round": [1],
          "learning_rate": [0.01, 0.02],
