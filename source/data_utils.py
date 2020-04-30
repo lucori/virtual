@@ -23,7 +23,7 @@ def post_process_datasets(federated_data, epochs=1):
             for data in federated_data]
 
 
-def federated_dataset(dataset_conf, data_dir=None):
+def federated_dataset(dataset_conf, data_dir=Path('data')):
     name = dataset_conf['name']
     num_clients = dataset_conf['num_clients']
     if name == 'mnist':
@@ -313,8 +313,9 @@ def shakspeare(num_clients=-1, seq_lenght=80, data_dir=None):
     def data(client, source):
         return postprocess(preprocess(source.create_tf_dataset_for_client(client)))
 
-    train_file = data_dir / 'datasets' / 'shakespeare_train.h5'
-    test_file = data_dir / 'datasets' / 'shakespeare_test.h5'
+    if data_dir:
+        train_file = data_dir / 'datasets' / 'shakespeare_train.h5'
+        test_file = data_dir / 'datasets' / 'shakespeare_test.h5'
     if data_dir and train_file.is_file() and test_file.is_file():
         logger.debug(f"Data already exists, loading from {data_dir}")
         train_data = hdf5_client_data.HDF5ClientData(train_file)
