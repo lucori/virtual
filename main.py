@@ -193,20 +193,33 @@ def run_experiments(configs, root_path, data_dir=None, use_scratch=False):
     num_clients = len(fede_train_data)
     model_conf['num_clients'] = num_clients
 
-    HP_DICT = create_hparams(hp_conf, data_set_conf, training_conf,
-                             model_conf, logdir)
-
     experiments = _gridsearch(hp_conf)
     for session_num, exp_conf in enumerate(experiments):
-        all_params = {**data_set_conf, **training_conf,
-                      **model_conf, **exp_conf}
+        all_params = {**data_set_conf,
+                      **training_conf,
+                      **model_conf,
+                      **exp_conf}
 
         training_conf['num_rounds'] = \
             int(all_params['tot_epochs_per_client']
                 / (all_params['clients_per_round']
                    * all_params['epochs_per_round']))
-
         all_params['num_rounds'] = training_conf['num_rounds']
+
+        # Log configurations
+        logdir_run = logdir / f'{session_num}_{current_time}'
+        logger.info(f"saving results in {logdir_run}")
+        HP_DICT = create_hparams(hp_conf, data_set_conf, training_conf,
+                                 model_conf, logdir_run)
+
+        write_hparams(HP_DICT, session_num, exp_conf, data_set_conf,
+                      training_conf, model_conf, logdir_run, configs[
+                          'config_name'])
+
+        with open(logdir_run / 'config.json', 'w') as config_file:
+            json.dump(configs, config_file, indent=4)
+
+        # Prepare dataset
         seq_length = data_set_conf.get('seq_length', None)
         federated_train_data_batched = [
             batch_dataset(data, all_params['batch_size'],
@@ -222,14 +235,7 @@ def run_experiments(configs, root_path, data_dir=None, use_scratch=False):
         sample_batch = tf.nest.map_structure(
             lambda x: x.numpy(), iter(federated_train_data_batched[0]).next())
 
-        logdir_run = logdir / f'{session_num}_{current_time}'
-        logger.info(f"saving results in {logdir_run}")
-        write_hparams(HP_DICT, session_num, exp_conf, data_set_conf,
-                      training_conf, model_conf, logdir_run, configs[
-                          'config_name'])
-        with open(logdir_run / 'config.json', 'w') as config_file:
-            json.dump(configs, config_file, indent=4)
-
+        # Run the experiment
         logger.info(f'Starting run {session_num} '
                     f'with parameters {all_params}...')
         model_fn = get_compiled_model_fn_from_dict(all_params, sample_batch)
