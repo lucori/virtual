@@ -102,9 +102,11 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
 
     #TODO: add hierarchical RNN
     def create_model_hierarchical(model_class=tf.keras.Model, train_size=None):
-        input = tf.keras.layers.Input(shape=dict_conf['layers'][0]['input_shape'])
-        client_path = input
-        server_path = input
+        in_key = ('input_dim' if 'input_dim' in dict_conf['layers'][0]
+                  else 'input_shape')
+        in_layer = tf.keras.layers.Input(shape=dict_conf['layers'][0][in_key])
+        client_path = in_layer
+        server_path = in_layer
 
         for layer_params in dict_conf['layers']:
             layer_params = dict(layer_params)
@@ -130,7 +132,7 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                 client_path = layer_class(**layer_params)(client_path)
                 server_path = layer_class(**layer_params)(server_path)
 
-        return model_class(inputs=input, outputs=client_path)
+        return model_class(inputs=in_layer, outputs=client_path)
 
     def compile_model(model):
 
