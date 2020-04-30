@@ -43,22 +43,29 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
         for layer_params in dict_conf['layers']:
             layer_params = dict(layer_params)
             layer_class = globals()[layer_params['name']]
+            layer_params.pop('name')
+
+            def kernel_reg_fn():
+                return CenteredL2Regularizer(dict_conf['l2_reg'])
+            kernel_divergence_fn = (lambda q, p, ignore:
+                                    dict_conf['kl_weight']
+                                    * kl_lib.kl_divergence(q, p)
+                                    / float(train_size))
             if issubclass(layer_class, DenseShared):
-                kernel_divergence_fn = (lambda q, p, ignore:  dict_conf['kl_weight'] * kl_lib.kl_divergence(q, p) / float(train_size))
                 layer_params['kernel_divergence_fn'] = kernel_divergence_fn
                 layer_params['num_clients'] = dict_conf['num_clients']
                 layer_params['prior_scale'] = dict_conf['prior_scale']
             if layer_class == Conv2DVirtual:
-                kernel_divergence_fn = (lambda q, p, ignore: dict_conf['kl_weight'] * kl_lib.kl_divergence(q, p) / float(train_size))
                 layer_params['kernel_divergence_fn'] = kernel_divergence_fn
                 layer_params['num_clients'] = dict_conf['num_clients']
                 layer_params['prior_scale'] = dict_conf['prior_scale']
             if layer_class == DenseCentered:
-                layer_params['kernel_regularizer'] = lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
-                layer_params['bias_regularizer'] = lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
+                layer_params['kernel_regularizer'] = kernel_reg_fn
+                layer_params['bias_regularizer'] = kernel_reg_fn
             if layer_class == EmbeddingCentered:
-                layer_params['embeddings_regularizer'] = lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
-                layer_params['batch_input_shape'] = [dict_conf['batch_size'], dict_conf['seq_length']]
+                layer_params['embeddings_regularizer'] = kernel_reg_fn
+                layer_params['batch_input_shape'] = [dict_conf['batch_size'],
+                                                     dict_conf['seq_length']]
                 layer_params['mask_zero'] = True
             if layer_class == Conv2DCentered:
                 layer_params['kernel_regularizer'] = \
@@ -66,18 +73,17 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                 layer_params['bias_regularizer'] = \
                     lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
             if layer_class == GaussianEmbedding:
-                embedding_divergence_fn = (
-                    lambda q, p, ignore: dict_conf['kl_weight'] * kl_lib.kl_divergence(q, p) / float(train_size))
-                layer_params['embedding_divergence_fn'] = embedding_divergence_fn
+                layer_params['embedding_divergence_fn'] = kernel_divergence_fn
                 layer_params['num_clients'] = dict_conf['num_clients']
                 layer_params['prior_scale'] = dict_conf['prior_scale']
-                layer_params['batch_input_shape'] = [dict_conf['batch_size'], dict_conf['seq_length']]
+                layer_params['batch_input_shape'] = [dict_conf['batch_size'],
+                                                     dict_conf['seq_length']]
                 layer_params['mask_zero'] = True
             if layer_class == LSTMCellCentered:
                 cell_params = dict(layer_params)
-                cell_params['kernel_regularizer'] = lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
-                cell_params['recurrent_regularizer'] = lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
-                cell_params['bias_regularizer'] = lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
+                cell_params['kernel_regularizer'] = kernel_reg_fn
+                cell_params['recurrent_regularizer'] = kernel_reg_fn
+                cell_params['bias_regularizer'] = kernel_reg_fn
                 cell = layer_class(**cell_params)
                 layer_params= {'cell': cell,
                                'return_sequences': True,
@@ -86,11 +92,11 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
             if layer_class == LSTMCellVariational:
                 cell_params = dict(layer_params)
                 cell_params['num_clients'] = dict_conf['num_clients']
-                cell_params['kernel_divergence_fn'] = (lambda q, p, ignore:
-                                                kl_lib.kl_divergence(q, p) / float(train_size))
-                cell_params['recurrent_kernel_divergence_fn'] = (lambda q, p, ignore:
-                                                          kl_lib.kl_divergence(q, p) / float(train_size))
+                cell_params['kernel_divergence_fn'] = kernel_divergence_fn
+                cell_params['recurrent_kernel_divergence_fn'] = \
+                    kernel_divergence_fn
                 cell = layer_class(**cell_params)
+
                 layer_params = {'cell': cell,
                                 'return_sequences': True,
                                 'stateful': True}
