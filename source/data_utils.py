@@ -318,8 +318,8 @@ def shakspeare(num_clients=-1, seq_lenght=80, data_dir=None):
         test_file = data_dir / 'datasets' / 'shakespeare_test.h5'
     if data_dir and train_file.is_file() and test_file.is_file():
         logger.debug(f"Data already exists, loading from {data_dir}")
-        train_data = hdf5_client_data.HDF5ClientData(train_file)
-        test_data = hdf5_client_data.HDF5ClientData(test_file)
+        train_data = hdf5_client_data.HDF5ClientData(str(train_file))
+        test_data = hdf5_client_data.HDF5ClientData(str(test_file))
     else:
         train_data, test_data = tff.simulation.datasets.shakespeare.load_data(
             cache_dir=data_dir)
