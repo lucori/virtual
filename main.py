@@ -39,7 +39,7 @@ def _setup_logger(results_path, create_stdlog):
 
     if create_stdlog:
         handler = logging.StreamHandler(sys.stdout)
-        handler.setLevel(logging.INFO)
+        handler.setLevel(logging.DEBUG)
         root_logger.addHandler(handler)
 
 
