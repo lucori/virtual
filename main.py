@@ -132,7 +132,8 @@ def _gridsearch(hp_conf):
     return experiments
 
 
-def submit_jobs(configs, root_path, data_dir, mem=8000, use_scratch=False):
+def submit_jobs(configs, root_path, data_dir, hour=12, mem=8000,
+                use_scratch=False):
     current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     config_dir = root_path / f'temp_configs_{current_time}'
     config_dir.mkdir(exist_ok=True)
@@ -153,7 +154,7 @@ def submit_jobs(configs, root_path, data_dir, mem=8000, use_scratch=False):
             json.dump(new_config, config_file)
 
         # Run training with the new config file
-        command = (f"bsub -n 2 -W 12:00 "
+        command = (f"bsub -n 2 -W {hour}:00 "
                    f"-R rusage[mem={mem},scratch=80000,"
                    f"ngpus_excl_p=1] "
                    f"python main.py --result_dir {root_path} "
@@ -269,15 +270,21 @@ def main():
                         help="Whether to submit jobs to leonhard for "
                              "grid search")
 
-    parser.add_argument("--scratch", action='store_true',
+    parser.add_argument("-s", "--scratch", action='store_true',
                         help="Whether to first copy the dataset to the "
                              "scratch storage of Leonhard. Do not use on "
                              "other systems than Leonhard.")
-    parser.add_argument("--mem",
+    parser.add_argument("-m", "--memory",
                         type=int,
                         default=8500,
                         help="Memory allocated for each leonhard job. This "
                              "will be ignored of Leonhard is not selected.")
+    parser.add_argument("-t", "--time",
+                        type=int,
+                        default=12,
+                        help="Number of hours requested for the job on "
+                             "Leonhard. For virtual models usually it "
+                             "requires more time than this default value.")
 
     args = parser.parse_args()
     # Read config files
@@ -295,8 +302,8 @@ def main():
                        "doing.")
 
     if args.submit_leonhard:
-        submit_jobs(configs, args.result_dir, args.data_dir, args.mem,
-                    args.scratch)
+        submit_jobs(configs, args.result_dir, args.data_dir,
+                    hour=args.time, mem=args.memory, use_scratch=args.scratch)
     else:
         gpu_session(configs['session']['num_gpus'])
         run_experiments(configs, args.result_dir, args.data_dir, args.scratch)
