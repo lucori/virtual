@@ -51,6 +51,10 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                                     dict_conf['kl_weight']
                                     * kl_lib.kl_divergence(q, p)
                                     / float(train_size))
+            reccurrent_divergence_fn = (lambda q, p, ignore:
+                                        dict_conf['kl_weight']
+                                        * kl_lib.kl_divergence(q, p)
+                                        / float(train_size))
             if issubclass(layer_class, DenseShared):
                 layer_params['kernel_divergence_fn'] = kernel_divergence_fn
                 layer_params['num_clients'] = dict_conf['num_clients']
@@ -94,7 +98,7 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                 cell_params['num_clients'] = dict_conf['num_clients']
                 cell_params['kernel_divergence_fn'] = kernel_divergence_fn
                 cell_params['recurrent_kernel_divergence_fn'] = \
-                    kernel_divergence_fn
+                    reccurrent_divergence_fn
                 cell = layer_class(**cell_params)
 
                 layer_params = {'cell': cell,
@@ -119,18 +123,22 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
             layer_class = globals()[layer_params['name']]
             layer_params.pop('name')
 
-            kernel_divergence_fn = (lambda q, p, ignore:
+            server_divergence_fn = (lambda q, p, ignore:
+                                    dict_conf['kl_weight']
+                                    * kl_lib.kl_divergence(q, p)
+                                    / float(train_size))
+            client_divergence_fn = (lambda q, p, ignore:
                                     dict_conf['kl_weight']
                                     * kl_lib.kl_divergence(q, p)
                                     / float(train_size))
             if issubclass(layer_class, DenseShared):
                 server_params = dict(layer_params)
-                server_params['kernel_divergence_fn'] = kernel_divergence_fn
+                server_params['kernel_divergence_fn'] = server_divergence_fn
                 server_params['num_clients'] = dict_conf['num_clients']
                 server_params['prior_scale'] = dict_conf['prior_scale']
 
                 client_params = dict(layer_params)
-                client_params['kernel_divergence_fn'] = kernel_divergence_fn
+                client_params['kernel_divergence_fn'] = client_divergence_fn
                 client_params['activation'] = 'linear'
 
                 client_path = tfp.layers.DenseReparameterization(
@@ -143,13 +151,13 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
             elif isinstance(layer_class, Conv2DVirtual):
 
                 client_params = dict(layer_params)
-                client_params['kernel_divergence_fn'] = kernel_divergence_fn
+                client_params['kernel_divergence_fn'] = client_divergence_fn
                 client_params['activation'] = 'linear'
                 client_path = tfp.layers.Convolution2DReparameterization(
                     **client_params)(client_path)
 
                 server_params = dict(layer_params)
-                server_params['kernel_divergence_fn'] = kernel_divergence_fn
+                server_params['kernel_divergence_fn'] = server_divergence_fn
                 server_params['num_clients'] = dict_conf['num_clients']
                 server_params['prior_scale'] = dict_conf['prior_scale']
                 server_path = layer_class(**server_params)(server_path)
