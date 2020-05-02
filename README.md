@@ -32,7 +32,7 @@ python main.py configurations/femnist_fedprox.json --result_dir $DATADIR/tff_vir
 
 In addition, few of Leonhard's job submission parameters such as requested memory or requested time can be passed as parameters. For more detail please see `main.py` or use help `python main.py -h`.
 
-Below is an example of submiting all jobs where 24h and 8500 memory is requested.
+Below is an example of submiting all jobs where 24h and 8500MB memory is requested.
 ```
 python main.py configurations/femnist_fedprox.json --result_dir $DATADIR/tff_virtual --data_dir $DATADIR/tff_virtual/data/keras --submit_leonhard -m 8500 -t 24
 ```
