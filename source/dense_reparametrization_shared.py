@@ -460,6 +460,21 @@ class RNNVarReparametrized(tf.keras.layers.RNN):
                                                       constants=constants)
 
 
+class RNNReparametrized(tf.keras.layers.RNN):
+    def call(self,
+             inputs,
+             mask=None,
+             training=None,
+             initial_state=None,
+             constants=None):
+        self.cell.sample_weights()
+        return super(RNNReparametrized, self).call(inputs,
+                                                   mask=mask,
+                                                   training=training,
+                                                   initial_state=initial_state,
+                                                   constants=constants)
+
+
 class Conv2DVirtual(tfp.layers.Convolution2DReparameterization,
                     VariationalReparametrized):
 
@@ -704,8 +719,7 @@ class Conv1DVirtual(tfp.layers.Convolution1DReparameterization,
         self.built = True
 
 
-class LSTMCellReparametrization(tf.keras.layers.LSTMCell,
-                                VariationalReparametrized):
+class LSTMCellReparametrization(tf.keras.layers.LSTMCell):
 
     def __init__(self,
                  units,
@@ -778,12 +792,10 @@ class LSTMCellReparametrization(tf.keras.layers.LSTMCell,
         shape_recurrent = (self.units, self.units * 4)
         dtype = tf.as_dtype(self.dtype or tf.keras.backend.floatx())
 
-        self.kernel_posterior = self.kernel_posterior_fn(dtype, shape_kernel, 'kernel_posterior', self.trainable,
-                                                         self.add_variable,
-                                                         initializer=self.kernel_initializer,
-                                                         regularizer=self.kernel_regularizer,
-                                                         constraint=self.kernel_constraint,
-                                                         caching_device=default_caching_device)
+        self.kernel_posterior = self.kernel_posterior_fn(dtype, shape_kernel,
+                                                         'kernel_posterior',
+                                                         self.trainable,
+                                                         self.add_variable)
 
         if self.kernel_prior_fn is None:
             self.kernel_prior = None
@@ -792,13 +804,11 @@ class LSTMCellReparametrization(tf.keras.layers.LSTMCell,
                 dtype, shape_kernel, 'kernel_prior',
                 self.trainable, self.add_variable)
 
-        self.recurrent_kernel_posterior = self.recurrent_kernel_posterior_fn(dtype, shape_recurrent, 'recurrent_kernel_posterior',
-                                                                             self.trainable,
-                                                                             self.add_variable,
-                                                                             initializer=self.recurrent_initializer,
-                                                                             regularizer=self.recurrent_regularizer,
-                                                                             constraint=self.recurrent_constraint,
-                                                                             caching_device=default_caching_device)
+        self.recurrent_kernel_posterior = \
+            self.recurrent_kernel_posterior_fn(dtype, shape_recurrent,
+                                               'recurrent_kernel_posterior',
+                                               self.trainable,
+                                               self.add_variable)
 
         if self.recurrent_kernel_prior_fn is None:
             self.recurrent_kernel_prior = None
