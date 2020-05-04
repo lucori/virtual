@@ -6,7 +6,7 @@ import tensorflow as tf
 import tensorflow_federated as tff
 import tensorflow_probability as tfp
 from tensorflow_probability.python.distributions import kullback_leibler as kl_lib
-from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, RNN
 import gc
 
 from source.virtual_process import VirtualFedProcess
@@ -22,8 +22,10 @@ from source.dense_reparametrization_shared import DenseShared
 from source.dense_reparametrization_shared import DenseLocalReparametrizationShared
 from source.dense_reparametrization_shared import DenseReparametrizationShared
 from source.dense_reparametrization_shared import RNNVarReparametrized
+from source.dense_reparametrization_shared import RNNReparametrized
 from source.dense_reparametrization_shared import GaussianEmbedding
 from source.dense_reparametrization_shared import LSTMCellVariational
+from source.dense_reparametrization_shared import LSTMCellReparametrization
 from source.constants import ROOT_LOGGER_STR
 
 
@@ -110,11 +112,11 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
             layers.append(layer_class(**layer_params))
         return model_class(layers)
 
-    #TODO: add hierarchical RNN
     def create_model_hierarchical(model_class=tf.keras.Model, train_size=None):
         in_key = ('input_dim' if 'input_dim' in dict_conf['layers'][0]
                   else 'input_shape')
-        in_layer = tf.keras.layers.Input(shape=dict_conf['layers'][0][in_key])
+        b_shape = (dict_conf['batch_size'], dict_conf['seq_length'])
+        in_layer = tf.keras.layers.Input(batch_input_shape=b_shape)
         client_path = in_layer
         server_path = in_layer
 
@@ -131,6 +133,16 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                                     dict_conf['kl_weight']
                                     * kl_lib.kl_divergence(q, p)
                                     / float(train_size))
+            client_reccurrent_divergence_fn = (lambda q, p, ignore:
+                                               dict_conf['kl_weight']
+                                               * kl_lib.kl_divergence(q, p)
+                                               / float(train_size))
+            server_reccurrent_divergence_fn = (lambda q, p, ignore:
+                                               dict_conf['kl_weight']
+                                               * kl_lib.kl_divergence(q, p)
+                                               / float(train_size))
+            # TODO: Maybe try non-linear activation
+            # TODO: Maybe swap the client and sever in the Gate
             if issubclass(layer_class, DenseShared):
                 server_params = dict(layer_params)
                 server_params['kernel_divergence_fn'] = server_divergence_fn
@@ -149,7 +161,6 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                     tf.keras.layers.Add()([Gate()(client_path), server_path]))
 
             elif isinstance(layer_class, Conv2DVirtual):
-
                 client_params = dict(layer_params)
                 client_params['kernel_divergence_fn'] = client_divergence_fn
                 client_params['activation'] = 'linear'
@@ -161,6 +172,33 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                 server_params['num_clients'] = dict_conf['num_clients']
                 server_params['prior_scale'] = dict_conf['prior_scale']
                 server_path = layer_class(**server_params)(server_path)
+
+                client_path = tf.keras.layers.Activation(
+                    activation=layer_params['activation'])(
+                    tf.keras.layers.Add()([Gate()(client_path), server_path]))
+            elif issubclass(layer_class, LSTMCellVariational):
+                server_params = dict(layer_params)
+                server_params['num_clients'] = dict_conf['num_clients']
+                server_params['prior_scale'] = dict_conf['prior_scale']
+                server_params['kernel_divergence_fn'] = server_divergence_fn
+                server_params['recurrent_kernel_divergence_fn'] = \
+                    server_reccurrent_divergence_fn
+                server_cell = layer_class(**server_params)
+                server_params = {'cell': server_cell,
+                                 'return_sequences': True,
+                                 'stateful': True}
+                server_path = RNNVarReparametrized(**server_params)(
+                    server_path)
+
+                client_params = dict(layer_params)
+                client_params['kernel_divergence_fn'] = client_divergence_fn
+                client_params['recurrent_kernel_divergence_fn'] = \
+                    client_reccurrent_divergence_fn
+                client_cell = LSTMCellReparametrization(**client_params)
+                client_params = {'cell': client_cell,
+                                 'return_sequences': True,
+                                 'stateful': True}
+                client_path = RNNReparametrized(**client_params)(client_path)
 
                 client_path = tf.keras.layers.Activation(
                     activation=layer_params['activation'])(
