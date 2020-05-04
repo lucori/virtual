@@ -702,3 +702,154 @@ class Conv1DVirtual(tfp.layers.Convolution1DReparameterization,
              .pretransformed_input.pretransformed_input))
 
         self.built = True
+
+
+class LSTMCellReparametrization(tf.keras.layers.LSTMCell,
+                                VariationalReparametrized):
+
+    def __init__(self,
+                 units,
+                 activation='tanh',
+                 recurrent_activation='hard_sigmoid',
+                 use_bias=True,
+                 kernel_initializer='glorot_uniform',
+                 recurrent_initializer='orthogonal',
+                 bias_initializer='zeros',
+                 unit_forget_bias=True,
+                 kernel_constraint=None,
+                 recurrent_constraint=None,
+                 bias_constraint=None,
+                 dropout=0.,
+                 recurrent_dropout=0.,
+                 implementation=1,
+                 kernel_posterior_fn=tfp_layers_util.default_mean_field_normal_fn(),
+                 kernel_posterior_tensor_fn=(lambda d: d.sample()),
+                 recurrent_kernel_posterior_fn=tfp_layers_util.default_mean_field_normal_fn(),
+                 recurrent_kernel_posterior_tensor_fn=(lambda d: d.sample()),
+                 kernel_prior_fn=tfp_layers_util.default_multivariate_normal_fn,
+                 recurrent_kernel_prior_fn=tfp_layers_util.default_multivariate_normal_fn,
+                 kernel_divergence_fn=(lambda q, p, ignore: tfd.kl_divergence(q, p)),
+                 recurrent_kernel_divergence_fn=(lambda q, p, ignore: tfd.kl_divergence(q, p)),
+                 bias_posterior_fn=tfp_layers_util.default_mean_field_normal_fn(
+                     is_singular=True),
+                 bias_posterior_tensor_fn=(lambda d: d.sample()),
+                 bias_prior_fn=None,
+                 bias_divergence_fn=(lambda q, p, ignore: tfd.kl_divergence(q, p)),
+                 **kwargs):
+
+        super(LSTMCellReparametrization, self).__init__(units,
+                                                  activation=activation,
+                                                  recurrent_activation=recurrent_activation,
+                                                  use_bias=use_bias,
+                                                  kernel_initializer=kernel_initializer,
+                                                  recurrent_initializer=recurrent_initializer,
+                                                  bias_initializer=bias_initializer,
+                                                  unit_forget_bias=unit_forget_bias,
+                                                  kernel_regularizer=None,
+                                                  recurrent_regularizer=None,
+                                                  bias_regularizer=None,
+                                                  kernel_constraint=kernel_constraint,
+                                                  recurrent_constraint=recurrent_constraint,
+                                                  bias_constraint=bias_constraint,
+                                                  dropout=dropout,
+                                                  recurrent_dropout=recurrent_dropout,
+                                                  implementation=implementation,
+                                                  **kwargs)
+        self.kernel_posterior_fn = kernel_posterior_fn
+        self.kernel_posterior_tensor_fn = kernel_posterior_tensor_fn
+        self.recurrent_kernel_posterior_fn = recurrent_kernel_posterior_fn
+        self.recurrent_kernel_posterior_tensor_fn = recurrent_kernel_posterior_tensor_fn
+        self.kernel_posterior_tensor_fn = kernel_posterior_tensor_fn
+        self.kernel_prior_fn = kernel_prior_fn
+        self.recurrent_kernel_prior_fn = recurrent_kernel_prior_fn
+        self.kernel_divergence_fn = kernel_divergence_fn
+        self.recurrent_kernel_divergence_fn = recurrent_kernel_divergence_fn
+        self.bias_posterior_fn = bias_posterior_fn
+        self.bias_posterior_tensor_fn = bias_posterior_tensor_fn
+        self.bias_prior_fn = bias_prior_fn
+        self.bias_divergence_fn = bias_divergence_fn
+
+    @tf_utils.shape_type_conversion
+    def build(self, input_shape):
+        default_caching_device = _caching_device(self)
+        input_dim = input_shape[-1]
+
+        shape_kernel = (input_dim, self.units * 4)
+        shape_recurrent = (self.units, self.units * 4)
+        dtype = tf.as_dtype(self.dtype or tf.keras.backend.floatx())
+
+        self.kernel_posterior = self.kernel_posterior_fn(dtype, shape_kernel, 'kernel_posterior', self.trainable,
+                                                         self.add_variable,
+                                                         initializer=self.kernel_initializer,
+                                                         regularizer=self.kernel_regularizer,
+                                                         constraint=self.kernel_constraint,
+                                                         caching_device=default_caching_device)
+
+        if self.kernel_prior_fn is None:
+            self.kernel_prior = None
+        else:
+            self.kernel_prior = self.kernel_prior_fn(
+                dtype, shape_kernel, 'kernel_prior',
+                self.trainable, self.add_variable)
+
+        self.recurrent_kernel_posterior = self.recurrent_kernel_posterior_fn(dtype, shape_recurrent, 'recurrent_kernel_posterior',
+                                                                             self.trainable,
+                                                                             self.add_variable,
+                                                                             initializer=self.recurrent_initializer,
+                                                                             regularizer=self.recurrent_regularizer,
+                                                                             constraint=self.recurrent_constraint,
+                                                                             caching_device=default_caching_device)
+
+        if self.recurrent_kernel_prior_fn is None:
+            self.recurrent_kernel_prior = None
+        else:
+            self.recurrent_kernel_prior = self.recurrent_kernel_prior_fn(
+                dtype, shape_recurrent, 'recurrent_kernel_prior',
+                self.trainable, self.add_variable)
+
+        if self.use_bias:
+            if self.unit_forget_bias:
+
+                def bias_initializer(_, *args, **kwargs):
+                    return K.concatenate([
+                        self.bias_initializer((self.units,), *args, **kwargs),
+                        initializers.Ones()((self.units,), *args, **kwargs),
+                        self.bias_initializer((self.units * 2,), *args, **kwargs),
+                        ])
+            else:
+                bias_initializer = self.bias_initializer
+
+            self.bias = self.add_weight(
+                          shape=(self.units * 4,),
+                          name='bias',
+                          initializer=bias_initializer,
+                          regularizer=self.bias_regularizer,
+                          constraint=self.bias_constraint,
+                          caching_device=default_caching_device)
+        else:
+            self.bias = None
+
+
+        self._apply_divergence(
+            self.kernel_divergence_fn,
+            self.kernel_posterior,
+            self.kernel_prior,
+            name='divergence_kernel')
+        self._apply_divergence(
+            self.recurrent_kernel_divergence_fn,
+            self.recurrent_kernel_posterior,
+            self.recurrent_kernel_prior,
+            name='divergence_recurrent_kernel')
+
+        self.built = True
+
+    def _apply_divergence(self, divergence_fn, posterior, prior, name, posterior_tensor=None):
+        divergence = tf.identity(
+            divergence_fn(
+                posterior, prior, posterior_tensor),
+            name=name)
+        self.add_loss(divergence)
+
+    def sample_weights(self):
+        self.kernel = self.kernel_posterior_tensor_fn(self.kernel_posterior)
+        self.recurrent_kernel = self.recurrent_kernel_posterior_tensor_fn(self.recurrent_kernel_posterior)
