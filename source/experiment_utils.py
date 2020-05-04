@@ -113,10 +113,15 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
         return model_class(layers)
 
     def create_model_hierarchical(model_class=tf.keras.Model, train_size=None):
-        in_key = ('input_dim' if 'input_dim' in dict_conf['layers'][0]
-                  else 'input_shape')
-        b_shape = (dict_conf['batch_size'], dict_conf['seq_length'])
-        in_layer = tf.keras.layers.Input(batch_input_shape=b_shape)
+        if 'architecture' in dict_conf and dict_conf['architecture'] == 'rnn':
+            b_shape = (dict_conf['batch_size'], dict_conf['seq_length'])
+            in_layer = tf.keras.layers.Input(batch_input_shape=b_shape)
+        else:
+            in_key = ('input_dim' if 'input_dim' in dict_conf['layers'][0]
+                      else 'input_shape')
+            input_dim = dict_conf['layers'][0][in_key]
+            in_layer = tf.keras.layers.Input(shape=input_dim)
+
         client_path = in_layer
         server_path = in_layer
 
@@ -160,7 +165,7 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                     activation=layer_params['activation'])(
                     tf.keras.layers.Add()([Gate()(client_path), server_path]))
 
-            elif isinstance(layer_class, Conv2DVirtual):
+            elif issubclass(layer_class, Conv2DVirtual):
                 client_params = dict(layer_params)
                 client_params['kernel_divergence_fn'] = client_divergence_fn
                 client_params['activation'] = 'linear'
