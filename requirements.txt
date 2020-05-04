@@ -53,3 +53,4 @@ werkzeug==0.16.0
 wheel==0.33.6
 wrapt==1.11.2
 tqdm==4.43.0
+gitpython

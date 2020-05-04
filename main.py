@@ -1,5 +1,6 @@
 from os import environ as os_environ
 import sys
+from git import Repo
 import subprocess
 from shutil import copytree
 import datetime
@@ -188,6 +189,8 @@ def run_experiments(configs, root_path, data_dir=None, use_scratch=False):
     logdir.mkdir(parents=True)
     logfile = logdir / LOGGER_RESULT_FILE
     _setup_logger(logfile, create_stdlog=True)
+    commit_id = Repo(Path().absolute()).head.commit
+    logger.debug(f"Running code on git commit {commit_id}")
 
     fede_train_data, fed_test_data, train_size, test_size = federated_dataset(
         data_set_conf, data_dir)
