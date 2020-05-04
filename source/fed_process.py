@@ -12,6 +12,9 @@ class FedProcess:
         self.clients = []
         self.server = None
 
+        self.train_summary_writer = None
+        self.test_summary_writer = None
+
     def build(self, *args, **kwargs):
         pass
 
@@ -19,7 +22,8 @@ class FedProcess:
         aggregated_deltas = []
         deltas = list(map(list, zip(*deltas)))
         for delta_layer in deltas:
-            aggregated_deltas.append(self.aggregate_deltas_single_layer(delta_layer, client_weight))
+            aggregated_deltas.append(
+                self.aggregate_deltas_single_layer(delta_layer, client_weight))
         return aggregated_deltas
 
     def aggregate_deltas_single_layer(self, deltas, client_weight=None):

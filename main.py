@@ -39,7 +39,7 @@ def _setup_logger(results_path, create_stdlog):
 
     if create_stdlog:
         handler = logging.StreamHandler(sys.stdout)
-        handler.setLevel(logging.INFO)
+        handler.setLevel(logging.DEBUG)
         root_logger.addHandler(handler)
 
 
@@ -89,7 +89,9 @@ def create_hparams(hp_conf, data_set_conf, training_conf,
                                                hp.RealInterval(0.0, 1e10))
 
     metrics = [hp.Metric('sparse_categorical_accuracy',
-                         display_name='Accuracy')]
+                         display_name='Accuracy'),
+               hp.Metric('max_sparse_categorical_accuracy',
+                         display_name='Max Accuracy')]
     with tf.summary.create_file_writer(str(logdir)).as_default():
         hp.hparams_config(hparams=HP_DICT.values(),
                           metrics=metrics)
@@ -130,7 +132,8 @@ def _gridsearch(hp_conf):
     return experiments
 
 
-def submit_jobs(configs, root_path, data_dir, mem=8000, use_scratch=False):
+def submit_jobs(configs, root_path, data_dir, hour=12, mem=8000,
+                use_scratch=False):
     current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     config_dir = root_path / f'temp_configs_{current_time}'
     config_dir.mkdir(exist_ok=True)
@@ -151,7 +154,7 @@ def submit_jobs(configs, root_path, data_dir, mem=8000, use_scratch=False):
             json.dump(new_config, config_file)
 
         # Run training with the new config file
-        command = (f"bsub -n 2 -W 12:00 "
+        command = (f"bsub -n 2 -W {hour}:00 "
                    f"-R rusage[mem={mem},scratch=80000,"
                    f"ngpus_excl_p=1] "
                    f"python main.py --result_dir {root_path} "
@@ -191,20 +194,33 @@ def run_experiments(configs, root_path, data_dir=None, use_scratch=False):
     num_clients = len(fede_train_data)
     model_conf['num_clients'] = num_clients
 
-    HP_DICT = create_hparams(hp_conf, data_set_conf, training_conf,
-                             model_conf, logdir)
-
     experiments = _gridsearch(hp_conf)
     for session_num, exp_conf in enumerate(experiments):
-        all_params = {**data_set_conf, **training_conf,
-                      **model_conf, **exp_conf}
+        all_params = {**data_set_conf,
+                      **training_conf,
+                      **model_conf,
+                      **exp_conf}
 
         training_conf['num_rounds'] = \
             int(all_params['tot_epochs_per_client']
                 / (all_params['clients_per_round']
                    * all_params['epochs_per_round']))
-
         all_params['num_rounds'] = training_conf['num_rounds']
+
+        # Log configurations
+        logdir_run = logdir / f'{session_num}_{current_time}'
+        logger.info(f"saving results in {logdir_run}")
+        HP_DICT = create_hparams(hp_conf, data_set_conf, training_conf,
+                                 model_conf, logdir_run)
+
+        write_hparams(HP_DICT, session_num, exp_conf, data_set_conf,
+                      training_conf, model_conf, logdir_run, configs[
+                          'config_name'])
+
+        with open(logdir_run / 'config.json', 'w') as config_file:
+            json.dump(configs, config_file, indent=4)
+
+        # Prepare dataset
         seq_length = data_set_conf.get('seq_length', None)
         federated_train_data_batched = [
             batch_dataset(data, all_params['batch_size'],
@@ -220,14 +236,7 @@ def run_experiments(configs, root_path, data_dir=None, use_scratch=False):
         sample_batch = tf.nest.map_structure(
             lambda x: x.numpy(), iter(federated_train_data_batched[0]).next())
 
-        logdir_run = logdir / f'{session_num}_{current_time}'
-        logger.info(f"saving results in {logdir_run}")
-        write_hparams(HP_DICT, session_num, exp_conf, data_set_conf,
-                      training_conf, model_conf, logdir_run, configs[
-                          'config_name'])
-        with open(logdir_run / 'config.json', 'w') as config_file:
-            json.dump(configs, config_file, indent=4)
-
+        # Run the experiment
         logger.info(f'Starting run {session_num} '
                     f'with parameters {all_params}...')
         model_fn = get_compiled_model_fn_from_dict(all_params, sample_batch)
@@ -236,6 +245,8 @@ def run_experiments(configs, root_path, data_dir=None, use_scratch=False):
                        all_params, logdir_run)
         tf.keras.backend.clear_session()
         gc.collect()
+
+        logger.info("Finished experiment successfully")
 
 
 def main():
@@ -252,21 +263,28 @@ def main():
                              "located")
     parser.add_argument("--data_dir",
                         type=Path,
+                        default=Path('data'),
                         help="Path in which data is located. This is "
                              "required if run on Leonhard")
     parser.add_argument("--submit_leonhard", action='store_true',
                         help="Whether to submit jobs to leonhard for "
                              "grid search")
 
-    parser.add_argument("--scratch", action='store_true',
+    parser.add_argument("-s", "--scratch", action='store_true',
                         help="Whether to first copy the dataset to the "
                              "scratch storage of Leonhard. Do not use on "
                              "other systems than Leonhard.")
-    parser.add_argument("--mem",
+    parser.add_argument("-m", "--memory",
                         type=int,
                         default=8500,
                         help="Memory allocated for each leonhard job. This "
                              "will be ignored of Leonhard is not selected.")
+    parser.add_argument("-t", "--time",
+                        type=int,
+                        default=12,
+                        help="Number of hours requested for the job on "
+                             "Leonhard. For virtual models usually it "
+                             "requires more time than this default value.")
 
     args = parser.parse_args()
     # Read config files
@@ -278,14 +296,14 @@ def main():
     if not args.result_dir:
         args.result_dir = Path(__file__).parent.absolute()
 
-    if args.scratch and not args.data_dir:
-        logger.warning("WARNING: You can not use scratch while not giving the "
-                       "datafolder. Scratch will be ignored.")
-        args.scratch = False
+    if args.scratch and args.data_dir == Path('data'):
+        logger.warning("WARNING: You can not use scratch while not on "
+                       "Leonhard. Make sure you understand what you are "
+                       "doing.")
 
     if args.submit_leonhard:
-        submit_jobs(configs, args.result_dir, args.data_dir, args.mem,
-                    args.scratch)
+        submit_jobs(configs, args.result_dir, args.data_dir,
+                    hour=args.time, mem=args.memory, use_scratch=args.scratch)
     else:
         gpu_session(configs['session']['num_gpus'])
         run_experiments(configs, args.result_dir, args.data_dir, args.scratch)

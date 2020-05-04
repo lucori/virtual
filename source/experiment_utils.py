@@ -43,22 +43,33 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
         for layer_params in dict_conf['layers']:
             layer_params = dict(layer_params)
             layer_class = globals()[layer_params['name']]
+            layer_params.pop('name')
+
+            def kernel_reg_fn():
+                return CenteredL2Regularizer(dict_conf['l2_reg'])
+            kernel_divergence_fn = (lambda q, p, ignore:
+                                    dict_conf['kl_weight']
+                                    * kl_lib.kl_divergence(q, p)
+                                    / float(train_size))
+            reccurrent_divergence_fn = (lambda q, p, ignore:
+                                        dict_conf['kl_weight']
+                                        * kl_lib.kl_divergence(q, p)
+                                        / float(train_size))
             if issubclass(layer_class, DenseShared):
-                kernel_divergence_fn = (lambda q, p, ignore:  dict_conf['kl_weight'] * kl_lib.kl_divergence(q, p) / float(train_size))
                 layer_params['kernel_divergence_fn'] = kernel_divergence_fn
                 layer_params['num_clients'] = dict_conf['num_clients']
                 layer_params['prior_scale'] = dict_conf['prior_scale']
             if layer_class == Conv2DVirtual:
-                kernel_divergence_fn = (lambda q, p, ignore: dict_conf['kl_weight'] * kl_lib.kl_divergence(q, p) / float(train_size))
                 layer_params['kernel_divergence_fn'] = kernel_divergence_fn
                 layer_params['num_clients'] = dict_conf['num_clients']
                 layer_params['prior_scale'] = dict_conf['prior_scale']
             if layer_class == DenseCentered:
-                layer_params['kernel_regularizer'] = lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
-                layer_params['bias_regularizer'] = lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
+                layer_params['kernel_regularizer'] = kernel_reg_fn
+                layer_params['bias_regularizer'] = kernel_reg_fn
             if layer_class == EmbeddingCentered:
-                layer_params['embeddings_regularizer'] = lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
-                layer_params['batch_input_shape'] = [dict_conf['batch_size'], dict_conf['seq_length']]
+                layer_params['embeddings_regularizer'] = kernel_reg_fn
+                layer_params['batch_input_shape'] = [dict_conf['batch_size'],
+                                                     dict_conf['seq_length']]
                 layer_params['mask_zero'] = True
             if layer_class == Conv2DCentered:
                 layer_params['kernel_regularizer'] = \
@@ -66,18 +77,17 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                 layer_params['bias_regularizer'] = \
                     lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
             if layer_class == GaussianEmbedding:
-                embedding_divergence_fn = (
-                    lambda q, p, ignore: dict_conf['kl_weight'] * kl_lib.kl_divergence(q, p) / float(train_size))
-                layer_params['embedding_divergence_fn'] = embedding_divergence_fn
+                layer_params['embedding_divergence_fn'] = kernel_divergence_fn
                 layer_params['num_clients'] = dict_conf['num_clients']
                 layer_params['prior_scale'] = dict_conf['prior_scale']
-                layer_params['batch_input_shape'] = [dict_conf['batch_size'], dict_conf['seq_length']]
+                layer_params['batch_input_shape'] = [dict_conf['batch_size'],
+                                                     dict_conf['seq_length']]
                 layer_params['mask_zero'] = True
             if layer_class == LSTMCellCentered:
                 cell_params = dict(layer_params)
-                cell_params['kernel_regularizer'] = lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
-                cell_params['recurrent_regularizer'] = lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
-                cell_params['bias_regularizer'] = lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
+                cell_params['kernel_regularizer'] = kernel_reg_fn
+                cell_params['recurrent_regularizer'] = kernel_reg_fn
+                cell_params['bias_regularizer'] = kernel_reg_fn
                 cell = layer_class(**cell_params)
                 layer_params= {'cell': cell,
                                'return_sequences': True,
@@ -86,11 +96,11 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
             if layer_class == LSTMCellVariational:
                 cell_params = dict(layer_params)
                 cell_params['num_clients'] = dict_conf['num_clients']
-                cell_params['kernel_divergence_fn'] = (lambda q, p, ignore:
-                                                kl_lib.kl_divergence(q, p) / float(train_size))
-                cell_params['recurrent_kernel_divergence_fn'] = (lambda q, p, ignore:
-                                                          kl_lib.kl_divergence(q, p) / float(train_size))
+                cell_params['kernel_divergence_fn'] = kernel_divergence_fn
+                cell_params['recurrent_kernel_divergence_fn'] = \
+                    reccurrent_divergence_fn
                 cell = layer_class(**cell_params)
+
                 layer_params = {'cell': cell,
                                 'return_sequences': True,
                                 'stateful': True}
@@ -102,35 +112,64 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
 
     #TODO: add hierarchical RNN
     def create_model_hierarchical(model_class=tf.keras.Model, train_size=None):
-        input = tf.keras.layers.Input(shape=dict_conf['layers'][0]['input_shape'])
-        client_path = input
-        server_path = input
+        in_key = ('input_dim' if 'input_dim' in dict_conf['layers'][0]
+                  else 'input_shape')
+        in_layer = tf.keras.layers.Input(shape=dict_conf['layers'][0][in_key])
+        client_path = in_layer
+        server_path = in_layer
 
         for layer_params in dict_conf['layers']:
             layer_params = dict(layer_params)
             layer_class = globals()[layer_params['name']]
-            args_client = {}
-            args_server = {}
+            layer_params.pop('name')
+
+            server_divergence_fn = (lambda q, p, ignore:
+                                    dict_conf['kl_weight']
+                                    * kl_lib.kl_divergence(q, p)
+                                    / float(train_size))
+            client_divergence_fn = (lambda q, p, ignore:
+                                    dict_conf['kl_weight']
+                                    * kl_lib.kl_divergence(q, p)
+                                    / float(train_size))
             if issubclass(layer_class, DenseShared):
-                kernel_divergence_fn = (
-                    lambda q, p, ignore: dict_conf['kl_weight'] * kl_lib.kl_divergence(q, p) / float(train_size))
-                args_server['kernel_divergence_fn'] = kernel_divergence_fn
-                args_server['num_clients'] = dict_conf['num_clients']
-                args_server['prior_scale'] = dict_conf['prior_scale']
-                args_server['activation'] = layer_params['activation']
+                server_params = dict(layer_params)
+                server_params['kernel_divergence_fn'] = server_divergence_fn
+                server_params['num_clients'] = dict_conf['num_clients']
+                server_params['prior_scale'] = dict_conf['prior_scale']
 
-                args_client['activation'] = 'linear'
-                args_client['kernel_divergence_fn'] = kernel_divergence_fn
+                client_params = dict(layer_params)
+                client_params['kernel_divergence_fn'] = client_divergence_fn
+                client_params['activation'] = 'linear'
 
-                client_path = tfp.layers.DenseReparameterization(layer_params['units'], **args_client)(client_path)
-                server_path = layer_class(layer_params['units'], **args_server)(server_path)
-                client_path = tf.keras.layers.Activation(activation=layer_params['activation'])(tf.keras.layers.Add()(
-                    [Gate()(client_path), server_path]))
+                client_path = tfp.layers.DenseReparameterization(
+                    **client_params)(client_path)
+                server_path = layer_class(**server_params)(server_path)
+                client_path = tf.keras.layers.Activation(
+                    activation=layer_params['activation'])(
+                    tf.keras.layers.Add()([Gate()(client_path), server_path]))
+
+            elif isinstance(layer_class, Conv2DVirtual):
+
+                client_params = dict(layer_params)
+                client_params['kernel_divergence_fn'] = client_divergence_fn
+                client_params['activation'] = 'linear'
+                client_path = tfp.layers.Convolution2DReparameterization(
+                    **client_params)(client_path)
+
+                server_params = dict(layer_params)
+                server_params['kernel_divergence_fn'] = server_divergence_fn
+                server_params['num_clients'] = dict_conf['num_clients']
+                server_params['prior_scale'] = dict_conf['prior_scale']
+                server_path = layer_class(**server_params)(server_path)
+
+                client_path = tf.keras.layers.Activation(
+                    activation=layer_params['activation'])(
+                    tf.keras.layers.Add()([Gate()(client_path), server_path]))
             else:
                 client_path = layer_class(**layer_params)(client_path)
                 server_path = layer_class(**layer_params)(server_path)
 
-        return model_class(inputs=input, outputs=client_path)
+        return model_class(inputs=in_layer, outputs=client_path)
 
     def compile_model(model):
 
@@ -162,21 +201,24 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
     return model_fn
 
 
-def run_simulation(model_fn, federated_train_data, federated_test_data, train_size, test_size, dict_conf, logdir):
-    if dict_conf['method'] == 'virtual':
-        virtual_process = VirtualFedProcess(model_fn, dict_conf['num_clients'],
-                                            damping_factor=dict_conf['damping_factor'],
-                                            fed_avg_init=dict_conf['fed_avg_init'])
-        virtual_process.fit(federated_train_data, dict_conf['num_rounds'], dict_conf['clients_per_round'],
-                            dict_conf['epochs_per_round'], train_size=train_size, test_size=test_size,
+def run_simulation(model_fn, federated_train_data, federated_test_data,
+                   train_size, test_size, cfgs, logdir):
+    if cfgs['method'] == 'virtual':
+        virtual_process = VirtualFedProcess(model_fn, cfgs['num_clients'],
+                                            damping_factor=cfgs['damping_factor'],
+                                            fed_avg_init=cfgs['fed_avg_init'])
+        virtual_process.fit(federated_train_data, cfgs['num_rounds'],
+                            cfgs['clients_per_round'],
+                            cfgs['epochs_per_round'],
+                            train_size=train_size, test_size=test_size,
                             federated_test_data=federated_test_data,
-                            tensorboard_updates=dict_conf['tensorboard_updates'],
-                            logdir=logdir, hierarchical=dict_conf['hierarchical'])
+                            tensorboard_updates=cfgs['tensorboard_updates'],
+                            logdir=logdir, hierarchical=cfgs['hierarchical'])
         tf.keras.backend.clear_session()
         del virtual_process
         gc.collect()
-    elif dict_conf['method'] == 'fedavg':
-        train_log_dir = logdir + '/train'
+    elif cfgs['method'] == 'fedavg':
+        train_log_dir = logdir / 'train'
         train_summary_writer = tf.summary.create_file_writer(train_log_dir)
         test_summary_writer = tf.summary.create_file_writer(logdir)
 
@@ -185,15 +227,17 @@ def run_simulation(model_fn, federated_train_data, federated_test_data, train_si
         evaluation = tff.learning.build_federated_evaluation(model_fn)
         state = iterative_process.initialize()
 
-        for round_num in range(dict_conf['num_rounds']):
-            state, metrics = iterative_process.next(state, [federated_train_data[indx] for indx in
-                                                            random.sample(range(dict_conf['num_clients']),
-                                                                          dict_conf['clients_per_round'])])
+        for round_num in range(cfgs['num_rounds']):
+            state, metrics = iterative_process.next(
+                state,
+                [federated_train_data[indx]
+                 for indx in random.sample(range(cfgs['num_clients']),
+                                           cfgs['clients_per_round'])])
             test_metrics = evaluation(state.model, federated_test_data)
             logger.info(f'round {round_num:2d}, '
                         f'metrics_train={metrics}, '
                         f'metrics_test={test_metrics}')
-            if round_num % dict_conf['tensorboard_updates'] == 0:
+            if round_num % cfgs['tensorboard_updates'] == 0:
                 with train_summary_writer.as_default():
                     for name, value in metrics._asdict().items():
                         tf.summary.scalar(name, value, step=round_num)
@@ -201,13 +245,15 @@ def run_simulation(model_fn, federated_train_data, federated_test_data, train_si
                     for name, value in test_metrics._asdict().items():
                         tf.summary.scalar(name, value, step=round_num)
 
-    elif dict_conf['method'] == 'fedprox':
-        fed_prox_process = FedProx(model_fn, dict_conf['num_clients'])
-        fed_prox_process.fit(federated_train_data, dict_conf['num_rounds'], dict_conf['clients_per_round'],
-                            dict_conf['epochs_per_round'], train_size=train_size, test_size=test_size,
-                            federated_test_data=federated_test_data,
-                            tensorboard_updates=dict_conf['tensorboard_updates'],
-                            logdir=logdir)
+    elif cfgs['method'] == 'fedprox':
+        fed_prox_process = FedProx(model_fn, cfgs['num_clients'])
+        fed_prox_process.fit(federated_train_data, cfgs['num_rounds'],
+                             cfgs['clients_per_round'],
+                             cfgs['epochs_per_round'],
+                             train_size=train_size, test_size=test_size,
+                             federated_test_data=federated_test_data,
+                             tensorboard_updates=cfgs['tensorboard_updates'],
+                             logdir=logdir)
         tf.keras.backend.clear_session()
         del fed_prox_process
         gc.collect()

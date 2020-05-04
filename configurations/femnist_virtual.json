@@ -30,7 +30,6 @@
                 "units": 10,
                 "activation": "softmax"
               }],
-              "hierarchical": false,
               "prior_scale": 1.0
    },
    "hp": {"epochs_per_round": [1, 5, 20, 50],
