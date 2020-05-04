@@ -11,8 +11,7 @@
                      "optimizer": "adam",
                      "fed_avg_init": false,
                      "tensorboard_updates": 1,
-                     "damping_factor": 1.0,
-                     "kl_weight": 0.0001
+                     "damping_factor": 1.0
     },
    "model_conf": {
               "layers": [{
@@ -35,6 +34,7 @@
    },
    "hp": {"epochs_per_round": [1, 5, 20, 50],
          "learning_rate": [0.0005, 0.001, 0.005, 0.01],
+         "kl_weight": [0.00001, 0.0001, 0.001],
          "batch_size": [10, 50],
          "clients_per_round": [5, 20],
          "hierarchical": [true, false]
