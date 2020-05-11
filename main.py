@@ -1,5 +1,6 @@
 from os import environ as os_environ
 import sys
+import time
 from git import Repo
 import subprocess
 from shutil import copytree
@@ -166,6 +167,8 @@ def submit_jobs(configs, root_path, data_dir, hour=12, mem=8000,
                        f"{'--scratch ' if use_scratch else ''}"
                        f"{config_path}")
             subprocess.check_output(command.split())
+
+            time.sleep(5)
 
 
 def run_experiments(configs, root_path, data_dir=None, use_scratch=False):
