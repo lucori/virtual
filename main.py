@@ -104,7 +104,10 @@ def write_hparams(hp_dict, session_num, exp_conf, data_set_conf,
 
     hparams = {'run': int(session_num), 'config_name': config_name}
     for key_0, value_0 in exp_conf.items():
-        hparams[hp_dict[key_0]] = value_0
+        if isinstance(value_0, list):
+            hparams[hp_dict[key_0]] = str(value_0)
+        else:
+            hparams[hp_dict[key_0]] = value_0
     for key_1, value_1 in data_set_conf.items():
         hparams[hp_dict[f'data_{key_1}']] = str(value_1)
     for key_2, value_2 in training_conf.items():

@@ -46,6 +46,7 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
             layer_params = dict(layer_params)
             layer_class = globals()[layer_params['name']]
             layer_params.pop('name')
+            layer_params.pop('scale_init', None)
 
             def kernel_reg_fn():
                 return CenteredL2Regularizer(dict_conf['l2_reg'])
@@ -57,6 +58,16 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                                         dict_conf['kl_weight']
                                         * kl_lib.kl_divergence(q, p)
                                         / float(train_size))
+
+            if ('scale_init' in dict_conf
+                    and (issubclass(layer_class, DenseShared)
+                         or layer_class == Conv2DVirtual)):
+
+                scale_init = dict_conf['scale_init']
+                layer_params['untransformed_scale_initializer'] = \
+                    tf.random_normal_initializer(mean=scale_init[0],
+                                                 stddev=scale_init[1])
+
             if issubclass(layer_class, DenseShared):
                 layer_params['kernel_divergence_fn'] = kernel_divergence_fn
                 layer_params['num_clients'] = dict_conf['num_clients']

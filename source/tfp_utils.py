@@ -40,7 +40,8 @@ def compute_gaussian_ratio(loc1, p1, loc2, p2):
 
 def renormalize_mean_field_normal_fn(loc_ratio, prec_ratio):
 
-    def _fn(dtype, shape, name, trainable, add_variable_fn, initializer=tf.random_normal_initializer(stddev=0.1),
+    def _fn(dtype, shape, name, trainable, add_variable_fn,
+            initializer=tf.random_normal_initializer(stddev=0.1),
             regularizer=None, constraint=None, **kwargs):
         loc_scale_fn = tensor_loc_scale_fn(loc_initializer=initializer,
                                            loc_regularizer=regularizer,
@@ -78,10 +79,18 @@ def default_tensor_multivariate_normal_fn(loc_ratio, prec_ratio, num_clients, pr
     return _fn
 
 
-def tensor_loc_scale_fn(is_singular=False, loc_initializer=tf.random_normal_initializer(stddev=0.1),
-                        untransformed_scale_initializer=tf.random_normal_initializer(mean=-3., stddev=0.1),
-                        loc_regularizer=None, untransformed_scale_regularizer=None, loc_constraint=None,
-                        untransformed_scale_constraint=None, **kwargs):
+def tensor_loc_scale_fn(is_singular=False,
+                        loc_initializer
+                        =tf.random_normal_initializer(stddev=0.1),
+
+                        untransformed_scale_initializer
+                        =tf.random_normal_initializer(mean=-3., stddev=0.1),
+
+                        loc_regularizer=None,
+                        untransformed_scale_regularizer=None,
+                        loc_constraint=None,
+                        untransformed_scale_constraint=None,
+                        **kwargs):
     def _fn(dtype, shape, name, trainable, add_variable_fn):
         """Creates `loc`, `scale` parameters."""
         loc = add_variable_fn(

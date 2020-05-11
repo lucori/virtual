@@ -91,6 +91,11 @@ class DenseShared(VariationalReparametrized):
                  **kwargs
                  ):
 
+        self.untransformed_scale_initializer = None
+        if 'untransformed_scale_initializer' in kwargs:
+            self.untransformed_scale_initializer = \
+                kwargs.pop('untransformed_scale_initializer')
+
         super(DenseShared, self).__init__(units,
                                           activation=activation,
                                           activity_regularizer=activity_regularizer,
@@ -128,9 +133,16 @@ class DenseShared(VariationalReparametrized):
                                                                                  self.kernel_posterior_fn,
                                                                                  self.kernel_prior_fn)
         # Must have a posterior kernel.
-        self.kernel_posterior = self.kernel_posterior_fn(
-            dtype, [in_size, self.units], 'kernel_posterior',
-            self.trainable, self.add_variable)
+        if self.untransformed_scale_initializer:
+            self.kernel_posterior = self.kernel_posterior_fn(
+                dtype, [in_size, self.units], 'kernel_posterior',
+                self.trainable, self.add_variable,
+                untransformed_scale_initializer=
+                self.untransformed_scale_initializer)
+        else:
+            self.kernel_posterior = self.kernel_posterior_fn(
+                dtype, [in_size, self.units], 'kernel_posterior',
+                self.trainable, self.add_variable)
 
         if self.kernel_prior_fn is None:
             self.kernel_prior = None
@@ -501,6 +513,11 @@ class Conv2DVirtual(tfp.layers.Convolution2DReparameterization,
             prior_scale=1.,
             **kwargs):
 
+        self.untransformed_scale_initializer = None
+        if 'untransformed_scale_initializer' in kwargs:
+            self.untransformed_scale_initializer = \
+                kwargs.pop('untransformed_scale_initializer')
+
         super(Conv2DVirtual, self).__init__(
             filters=filters,
             kernel_size=kernel_size,
@@ -528,6 +545,7 @@ class Conv2DVirtual(tfp.layers.Convolution2DReparameterization,
         self.client_variable_dict = {}
         self.client_center_variable_dict = {}
         self.server_variable_dict = {}
+        self.untransformed_scale_initializer = None
 
     def build(self, input_shape):
         input_shape = tf.TensorShape(input_shape)
@@ -551,9 +569,16 @@ class Conv2DVirtual(tfp.layers.Convolution2DReparameterization,
                                     self.kernel_prior_fn)
 
         # Must have a posterior kernel.
-        self.kernel_posterior = self.kernel_posterior_fn(
-            dtype, kernel_shape, 'kernel_posterior',
-            self.trainable, self.add_variable)
+        if self.untransformed_scale_initializer:
+            self.kernel_posterior = self.kernel_posterior_fn(
+                dtype, kernel_shape, 'kernel_posterior',
+                self.trainable, self.add_variable,
+                untransformed_scale_initializer=
+                self.untransformed_scale_initializer)
+        else:
+            self.kernel_posterior = self.kernel_posterior_fn(
+                dtype, kernel_shape, 'kernel_posterior',
+                self.trainable, self.add_variable)
 
         if self.kernel_prior_fn is None:
             self.kernel_prior = None
