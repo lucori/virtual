@@ -137,7 +137,7 @@ def _gridsearch(hp_conf):
 
 
 def submit_jobs(configs, root_path, data_dir, hour=12, mem=8000,
-                use_scratch=False):
+                use_scratch=False, reps=1):
     current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     config_dir = root_path / f'temp_configs_{current_time}'
     config_dir.mkdir(exist_ok=True)
@@ -146,26 +146,26 @@ def submit_jobs(configs, root_path, data_dir, hour=12, mem=8000,
     experiments = _gridsearch(hp_conf)
     new_config = configs.copy()
     for session_num, exp_conf in enumerate(experiments):
+        for rep in range(reps):
+            for key, value in exp_conf.items():
+                new_config['hp'][key] = [value]
 
-        for key, value in exp_conf.items():
-            new_config['hp'][key] = [value]
+            # Save the new config file
+            config_path = config_dir / f"{configs['config_name']}_" \
+                                       f"g{current_time}_" \
+                                       f"{session_num}.json"
+            with config_path.open(mode='w') as config_file:
+                json.dump(new_config, config_file)
 
-        # Save the new config file
-        config_path = config_dir / f"{configs['config_name']}_" \
-                                   f"g{current_time}_" \
-                                   f"{session_num}.json"
-        with config_path.open(mode='w') as config_file:
-            json.dump(new_config, config_file)
-
-        # Run training with the new config file
-        command = (f"bsub -n 2 -W {hour}:00 "
-                   f"-R rusage[mem={mem},scratch=80000,"
-                   f"ngpus_excl_p=1] "
-                   f"python main.py --result_dir {root_path} "
-                   f"--data_dir {data_dir} "
-                   f"{'--scratch ' if use_scratch else ''}"
-                   f"{config_path}")
-        subprocess.check_output(command.split())
+            # Run training with the new config file
+            command = (f"bsub -n 2 -W {hour}:00 "
+                       f"-R rusage[mem={mem},scratch=80000,"
+                       f"ngpus_excl_p=1] "
+                       f"python main.py --result_dir {root_path} "
+                       f"--data_dir {data_dir} "
+                       f"{'--scratch ' if use_scratch else ''}"
+                       f"{config_path}")
+            subprocess.check_output(command.split())
 
 
 def run_experiments(configs, root_path, data_dir=None, use_scratch=False):
@@ -291,6 +291,11 @@ def main():
                         help="Number of hours requested for the job on "
                              "Leonhard. For virtual models usually it "
                              "requires more time than this default value.")
+    parser.add_argument("-r", "--repetitions",
+                        type=int,
+                        default=1,
+                        help="Number of repetitions to run the same "
+                             "experiment")
 
     args = parser.parse_args()
     # Read config files
@@ -309,7 +314,8 @@ def main():
 
     if args.submit_leonhard:
         submit_jobs(configs, args.result_dir, args.data_dir,
-                    hour=args.time, mem=args.memory, use_scratch=args.scratch)
+                    hour=args.time, mem=args.memory, use_scratch=args.scratch,
+                    reps=args.repetitions)
     else:
         gpu_session(configs['session']['num_gpus'])
         run_experiments(configs, args.result_dir, args.data_dir, args.scratch)
