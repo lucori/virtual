@@ -284,7 +284,7 @@ def main():
                              "will be ignored of Leonhard is not selected.")
     parser.add_argument("-t", "--time",
                         type=int,
-                        default=12,
+                        default=24,
                         help="Number of hours requested for the job on "
                              "Leonhard. For virtual models usually it "
                              "requires more time than this default value.")
