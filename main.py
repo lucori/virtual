@@ -154,7 +154,8 @@ def submit_jobs(configs, root_path, data_dir, hour=12, mem=8000,
             # Save the new config file
             config_path = config_dir / f"{configs['config_name']}_" \
                                        f"g{current_time}_" \
-                                       f"{session_num}.json"
+                                       f"{session_num}_" \
+                                       f"{rep}.json"
             with config_path.open(mode='w') as config_file:
                 json.dump(new_config, config_file)
 
