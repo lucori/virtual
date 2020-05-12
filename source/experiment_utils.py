@@ -157,8 +157,17 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                                                dict_conf['kl_weight']
                                                * kl_lib.kl_divergence(q, p)
                                                / float(train_size))
+
+            if ('scale_init' in dict_conf
+                    and (issubclass(layer_class, DenseShared)
+                         or layer_class == Conv2DVirtual)):
+
+                scale_init = dict_conf['scale_init']
+                layer_params['untransformed_scale_initializer'] = \
+                    tf.random_normal_initializer(mean=scale_init[0],
+                                                 stddev=scale_init[1])
+
             # TODO: Maybe try non-linear activation
-            # TODO: Maybe swap the client and sever in the Gate
             if issubclass(layer_class, DenseShared):
                 server_params = dict(layer_params)
                 server_params['kernel_divergence_fn'] = server_divergence_fn
@@ -168,7 +177,8 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                 client_params = dict(layer_params)
                 client_params['kernel_divergence_fn'] = client_divergence_fn
                 client_params['activation'] = 'linear'
-
+                client_params.pop('untransformed_scale_initializer', None)
+                
                 client_path = tfp.layers.DenseReparameterization(
                     **client_params)(client_path)
                 server_path = layer_class(**server_params)(server_path)
@@ -180,6 +190,7 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                 client_params = dict(layer_params)
                 client_params['kernel_divergence_fn'] = client_divergence_fn
                 client_params['activation'] = 'linear'
+                client_params.pop('untransformed_scale_initializer', None)
                 client_path = tfp.layers.Convolution2DReparameterization(
                     **client_params)(client_path)
 
