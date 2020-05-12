@@ -42,14 +42,14 @@ def federated_dataset(dataset_conf, data_dir=Path('data')):
 
     if name == 'femnist':
         if (data_dir
-                and (data_dir / 'datasets' / 'fed_emnist_train.h5').is_file()
-                and (data_dir / 'datasets' / 'fed_emnist_test.h5').is_file()):
-            train_file = data_dir / 'datasets' / 'fed_emnist_train.h5'
-            test_file = data_dir / 'datasets' / 'fed_emnist_test.h5'
+                and (data_dir / 'datasets' / 'fed_emnist_digitsonly_train.h5').is_file()
+                and (data_dir / 'datasets' / 'fed_emnist_digitsonly_test.h5').is_file()):
+            train_file = data_dir / 'datasets' / 'fed_emnist_digitsonly_train.h5'
+            test_file = data_dir / 'datasets' / 'fed_emnist_digitsonly_test.h5'
 
             logger.debug(f"Data already exists, loading from {data_dir}")
-            emnist_train = hdf5_client_data.HDF5ClientData(train_file)
-            emnist_test = hdf5_client_data.HDF5ClientData(test_file)
+            emnist_train = hdf5_client_data.HDF5ClientData(str(train_file))
+            emnist_test = hdf5_client_data.HDF5ClientData(str(test_file))
         else:
             emnist_train, emnist_test = tff.simulation.datasets.emnist.\
                 load_data(cache_dir=data_dir)
