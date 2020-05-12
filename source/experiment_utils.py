@@ -174,7 +174,7 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                 server_path = layer_class(**server_params)(server_path)
                 client_path = tf.keras.layers.Activation(
                     activation=layer_params['activation'])(
-                    tf.keras.layers.Add()([Gate()(client_path), server_path]))
+                    tf.keras.layers.Add()([Gate()(server_path), client_path]))
 
             elif issubclass(layer_class, Conv2DVirtual):
                 client_params = dict(layer_params)
@@ -191,7 +191,7 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
 
                 client_path = tf.keras.layers.Activation(
                     activation=layer_params['activation'])(
-                    tf.keras.layers.Add()([Gate()(client_path), server_path]))
+                    tf.keras.layers.Add()([Gate()(server_path), client_path]))
             elif issubclass(layer_class, LSTMCellVariational):
                 server_params = dict(layer_params)
                 server_params['num_clients'] = dict_conf['num_clients']
@@ -218,7 +218,7 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
 
                 client_path = tf.keras.layers.Activation(
                     activation=layer_params['activation'])(
-                    tf.keras.layers.Add()([Gate()(client_path), server_path]))
+                    tf.keras.layers.Add()([Gate()(server_path), client_path]))
             else:
                 client_path = layer_class(**layer_params)(client_path)
                 server_path = layer_class(**layer_params)(server_path)
