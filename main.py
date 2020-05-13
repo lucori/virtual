@@ -58,7 +58,13 @@ def create_hparams(hp_conf, data_set_conf, training_conf,
             HP_DICT[key_0] = hp.HParam(key_0, hp.Discrete([1, 5, 10, 20, 40, 50,
                                                            64, 128, 256, 512]))
         elif key_0 == 'epochs_per_round':
-            HP_DICT[key_0] = hp.HParam(key_0, hp.Discrete([1, 5, 10, 15, 20, 50]))
+            HP_DICT[key_0] = hp.HParam(key_0, hp.Discrete([1, 5, 10, 15, 20,
+                                                           25, 30, 35, 40,
+                                                           45, 50, 55, 60,
+                                                           65, 70, 75, 80,
+                                                           85, 90, 95, 100,
+                                                           110, 120, 130,
+                                                           140, 150]))
         elif key_0 == 'clients_per_round':
             HP_DICT[key_0] = hp.HParam(key_0, hp.Discrete([1, 2, 3, 4, 5,
                                                            10, 15, 20, 50]))
