@@ -32,7 +32,7 @@ class FedProcess:
                 if isinstance(el, tuple):
                     (loc, prec) = el
                     if client_weight:
-                        prec = prec*client_weight[i]
+                        prec = prec*client_weight[i]*self.num_clients
                     loc = tf.math.multiply(loc, prec)
                     delta_client[key] = (loc, prec)
                 else:
