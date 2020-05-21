@@ -545,7 +545,6 @@ class Conv2DVirtual(tfp.layers.Convolution2DReparameterization,
         self.client_variable_dict = {}
         self.client_center_variable_dict = {}
         self.server_variable_dict = {}
-        self.untransformed_scale_initializer = None
 
     def build(self, input_shape):
         input_shape = tf.TensorShape(input_shape)
