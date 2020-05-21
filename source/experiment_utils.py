@@ -13,6 +13,7 @@ from source.virtual_process import VirtualFedProcess
 from source.fed_prox import FedProx
 from source.gate_layer import Gate
 from source.utils import FlattenedCategoricalAccuracy
+from source.federated_devices import _Server
 from source.centered_layers import (DenseCentered, CenteredL2Regularizer,
                                     EmbeddingCentered, LSTMCellCentered,
                                     RNNCentered, Conv2DCentered)
@@ -26,6 +27,7 @@ from source.dense_reparametrization_shared import RNNReparametrized
 from source.dense_reparametrization_shared import GaussianEmbedding
 from source.dense_reparametrization_shared import LSTMCellVariational
 from source.dense_reparametrization_shared import LSTMCellReparametrization
+from source.tfp_utils import precision_from_untransformed_scale
 from source.constants import ROOT_LOGGER_STR
 
 
@@ -50,22 +52,29 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
 
             def kernel_reg_fn():
                 return CenteredL2Regularizer(dict_conf['l2_reg'])
+
+            k_w = float(train_size)
+            if issubclass(model_class, _Server):
+                k_w = 1
+
             kernel_divergence_fn = (lambda q, p, ignore:
                                     dict_conf['kl_weight']
-                                    * kl_lib.kl_divergence(q, p)
-                                    / float(train_size))
+                                    * kl_lib.kl_divergence(q, p) / k_w)
             reccurrent_divergence_fn = (lambda q, p, ignore:
                                         dict_conf['kl_weight']
-                                        * kl_lib.kl_divergence(q, p)
-                                        / float(train_size))
+                                        * kl_lib.kl_divergence(q, p) / k_w)
 
             if ('scale_init' in dict_conf
                     and (issubclass(layer_class, DenseShared)
                          or layer_class == Conv2DVirtual)):
-
                 scale_init = dict_conf['scale_init']
+                untransformed_scale = scale_init[0]
+                if scale_init[0] == 'auto':
+                    untransformed_scale = \
+                        precision_from_untransformed_scale.inverse(
+                            tf.constant(train_size, dtype=tf.float32))
                 layer_params['untransformed_scale_initializer'] = \
-                    tf.random_normal_initializer(mean=scale_init[0],
+                    tf.random_normal_initializer(mean=untransformed_scale,
                                                  stddev=scale_init[1])
 
             if issubclass(layer_class, DenseShared):
@@ -141,30 +150,35 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
             layer_class = globals()[layer_params['name']]
             layer_params.pop('name')
 
+            k_w = float(train_size)
+            if issubclass(model_class, _Server):
+                k_w = 1
             server_divergence_fn = (lambda q, p, ignore:
                                     dict_conf['kl_weight']
-                                    * kl_lib.kl_divergence(q, p)
-                                    / float(train_size))
+                                    * kl_lib.kl_divergence(q, p) / k_w)
             client_divergence_fn = (lambda q, p, ignore:
                                     dict_conf['kl_weight']
-                                    * kl_lib.kl_divergence(q, p)
-                                    / float(train_size))
+                                    * kl_lib.kl_divergence(q, p) / k_w)
             client_reccurrent_divergence_fn = (lambda q, p, ignore:
                                                dict_conf['kl_weight']
                                                * kl_lib.kl_divergence(q, p)
-                                               / float(train_size))
+                                               / k_w)
             server_reccurrent_divergence_fn = (lambda q, p, ignore:
                                                dict_conf['kl_weight']
                                                * kl_lib.kl_divergence(q, p)
-                                               / float(train_size))
+                                               / k_w)
 
             if ('scale_init' in dict_conf
                     and (issubclass(layer_class, DenseShared)
                          or layer_class == Conv2DVirtual)):
-
                 scale_init = dict_conf['scale_init']
+                untransformed_scale = scale_init[0]
+                if scale_init[0] == 'auto':
+                    untransformed_scale = \
+                        precision_from_untransformed_scale.inverse(
+                            tf.constant(train_size, dtype=tf.float32))
                 layer_params['untransformed_scale_initializer'] = \
-                    tf.random_normal_initializer(mean=scale_init[0],
+                    tf.random_normal_initializer(mean=untransformed_scale,
                                                  stddev=scale_init[1])
 
             # TODO: Maybe try non-linear activation
@@ -178,7 +192,7 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                 client_params['kernel_divergence_fn'] = client_divergence_fn
                 client_params['activation'] = 'linear'
                 client_params.pop('untransformed_scale_initializer', None)
-                
+
                 client_path = tfp.layers.DenseReparameterization(
                     **client_params)(client_path)
                 server_path = layer_class(**server_params)(server_path)

@@ -52,7 +52,8 @@ def renormalize_mean_field_normal_fn(loc_ratio, prec_ratio):
         if scale is None:
             dist = tfd.Deterministic(loc=loc)
         else:
-            loc_reparametrized, scale_reparametrized = reparametrize_loc_scale(loc, prec, loc_ratio, prec_ratio)
+            loc_reparametrized, scale_reparametrized = \
+                reparametrize_loc_scale(loc, prec, loc_ratio, prec_ratio)
             dist = tfd.Normal(loc=loc_reparametrized, scale=scale_reparametrized)
 
         batch_ndims = tf.size(dist.batch_shape_tensor())
