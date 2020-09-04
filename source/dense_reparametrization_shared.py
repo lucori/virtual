@@ -27,8 +27,7 @@ class VariationalReparametrized(LayerCentered):
     def build_posterior_fn(self, shape, dtype, name, posterior_fn, prior_fn):
         s_loc = self.add_variable(name=name+'_s_loc', shape=shape,
                                                                dtype=dtype, trainable=False,
-                                                               initializer=tf.random_normal_initializer(
-                                                                   stddev=0.1 * math.sqrt(self.num_clients)))
+                                                               initializer=tf.keras.initializers.zeros)
         scale_init = tf.random_normal_initializer(mean=+inf, stddev=0.1).__call__(shape=shape)
         scale_init = softplus.inverse(softplus.forward(scale_init) / math.sqrt(self.num_clients))
         s_untransformed_scale = self.add_variable(name=name+'_s_untransformed_scale', shape=shape,
@@ -37,7 +36,7 @@ class VariationalReparametrized(LayerCentered):
                                                   initializer=tf.keras.initializers.constant(scale_init.numpy()))
         s_prec = tfp.util.DeferredTensor(s_untransformed_scale, precision_from_untransformed_scale)
         s_i_loc = self.add_variable(name=name+'_s_i_loc', shape=shape, dtype=dtype, trainable=False,
-                                                               initializer=tf.random_normal_initializer(stddev=0.1))
+                                                               initializer=tf.keras.initializers.zeros)
         s_i_untransformed_scale = self.add_variable(name=name+'_s_i_untransformed_scale', shape=shape,
                                                     dtype=dtype,
                                                     trainable=False,
