@@ -263,8 +263,17 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
             if dict_conf['architecture'] == 'rnn':
                 metric = FlattenedCategoricalAccuracy(vocab_size=dict_conf['vocab_size'])
 
-        model.compile(optimizer=tf.optimizers.get({'class_name': dict_conf['optimizer'],
-                                                   'config': {'learning_rate': dict_conf['learning_rate']}}),
+        if "momentum" in dict_conf['optimizer']:
+            optimizer = tf.optimizers.get(
+                {'class_name': dict_conf['optimizer'],
+                 'config': {'learning_rate': dict_conf['learning_rate'],
+                            'momentum': dict_conf['momentum']}})
+        else:
+            optimizer = tf.optimizers.get(
+                {'class_name': dict_conf['optimizer'],
+                 'config': {'learning_rate': dict_conf['learning_rate']}})
+
+        model.compile(optimizer=optimizer,
                       loss=loss_fn,
                       metrics=[metric],
                       experimental_run_tf_function=False)

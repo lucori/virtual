@@ -65,14 +65,17 @@ def federated_dataset(dataset_conf, data_dir=Path('data')):
             return dataset.map(element_fn)
 
         def make_federated_data(client_data, client_ids):
-            return [preprocess(client_data.create_tf_dataset_for_client(x)) for x in client_ids]
+            return [preprocess(client_data.create_tf_dataset_for_client(x))
+                    for x in client_ids]
 
         sample_clients = emnist_train.client_ids[0:num_clients]
         federated_train_data = make_federated_data(emnist_train, sample_clients)
         federated_test_data = make_federated_data(emnist_test, sample_clients)
 
-        train_size = [tf.data.experimental.cardinality(data).numpy() for data in federated_train_data]
-        test_size = [tf.data.experimental.cardinality(data).numpy() for data in federated_test_data]
+        train_size = [tf.data.experimental.cardinality(data).numpy()
+                      for data in federated_train_data]
+        test_size = [tf.data.experimental.cardinality(data).numpy()
+                     for data in federated_test_data]
         federated_train_data = post_process_datasets(federated_train_data)
         federated_test_data = post_process_datasets(federated_test_data)
 
@@ -81,11 +84,14 @@ def federated_dataset(dataset_conf, data_dir=Path('data')):
             shakspeare(num_clients, dataset_conf['seq_length'], data_dir)
 
     if name == 'pmnist':
-        federated_train_data, federated_test_data = permuted_mnist(num_clients=num_clients)
+        federated_train_data, federated_test_data = permuted_mnist(
+            num_clients=num_clients)
         train_size = [data[0].shape[0] for data in federated_train_data]
         test_size = [data[0].shape[0] for data in federated_test_data]
-        federated_train_data = [tf.data.Dataset.from_tensor_slices(data) for data in federated_train_data]
-        federated_test_data = [tf.data.Dataset.from_tensor_slices(data) for data in federated_test_data]
+        federated_train_data = [tf.data.Dataset.from_tensor_slices(data)
+                                for data in federated_train_data]
+        federated_test_data = [tf.data.Dataset.from_tensor_slices(data)
+                               for data in federated_test_data]
 
     if name == 'human_activity':
         x, y = human_activity_preprocess(data_dir)
