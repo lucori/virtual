@@ -29,6 +29,7 @@ from source.dense_reparametrization_shared import LSTMCellVariational
 from source.dense_reparametrization_shared import LSTMCellReparametrization
 from source.tfp_utils import precision_from_untransformed_scale
 from source.constants import ROOT_LOGGER_STR
+from tensorflow_probability.python.layers import DenseReparameterization
 
 
 logger = logging.getLogger(ROOT_LOGGER_STR + '.' + __name__)
@@ -77,6 +78,8 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                     tf.random_normal_initializer(mean=untransformed_scale,
                                                  stddev=scale_init[1])
 
+            if layer_class == DenseReparameterization:
+                layer_params['kernel_divergence_fn'] = kernel_divergence_fn
             if issubclass(layer_class, DenseShared):
                 layer_params['kernel_divergence_fn'] = kernel_divergence_fn
                 layer_params['num_clients'] = dict_conf['num_clients']
