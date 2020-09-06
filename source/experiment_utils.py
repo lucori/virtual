@@ -263,15 +263,24 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
             if dict_conf['architecture'] == 'rnn':
                 metric = FlattenedCategoricalAccuracy(vocab_size=dict_conf['vocab_size'])
 
-        if "momentum" in dict_conf['optimizer']:
+        if "decay_rate" in dict_conf:
+            lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
+                dict_conf['learning_rate'],
+                decay_steps=dict_conf['decay_steps'],
+                decay_rate=dict_conf['decay_rate'],
+                staircase=True)
+        else:
+            lr_schedule = dict_conf['learning_rate']
+
+        if "momentum" in dict_conf:
             optimizer = tf.optimizers.get(
                 {'class_name': dict_conf['optimizer'],
-                 'config': {'learning_rate': dict_conf['learning_rate'],
+                 'config': {'learning_rate': lr_schedule,
                             'momentum': dict_conf['momentum']}})
         else:
             optimizer = tf.optimizers.get(
                 {'class_name': dict_conf['optimizer'],
-                 'config': {'learning_rate': dict_conf['learning_rate']}})
+                 'config': {'learning_rate': lr_schedule}})
 
         model.compile(optimizer=optimizer,
                       loss=loss_fn,
