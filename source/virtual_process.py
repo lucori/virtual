@@ -56,10 +56,12 @@ class VirtualFedProcess(FedProcess):
             deltas = []
             history_train = []
             for indx in clients_sampled:
-                self.clients[indx].receive_and_save_weights(self.server)
-                self.clients[indx].renew_center()
-                if round_i > 0 and self.fed_avg_init:
-                    self.clients[indx].initialize_kernel_posterior()
+                if round_i > 0:
+                    self.clients[indx].receive_and_save_weights(self.server)
+                    if self.clients[indx].s_i_to_update:
+                        self.clients[indx].renew_center()
+                    if self.fed_avg_init:
+                        self.clients[indx].initialize_kernel_posterior()
 
                 history_single = self.clients[indx].fit(
                     federated_train_data[indx],
@@ -67,6 +69,7 @@ class VirtualFedProcess(FedProcess):
                     validation_data=federated_test_data[indx],
                     epochs=epochs_per_round,
                     callbacks=callbacks)
+                self.clients[indx].s_i_to_update = True
 
                 self.clients[indx].apply_damping(self.damping_factor)
                 delta = self.clients[indx].compute_delta()
@@ -85,17 +88,17 @@ class VirtualFedProcess(FedProcess):
             #              for client in clients_sampled])
             aggregated_deltas = self.aggregate_deltas_multi_layer(deltas)
             self.server.apply_delta(aggregated_deltas)
-            test = [self.server.evaluate(test_data, verbose=0)
+            server_test = [self.server.evaluate(test_data, verbose=0)
                     for test_data in federated_test_data]
             avg_train = avg_dict(history_train,
                                  [train_size[client]
                                   for client in clients_sampled])
             avg_test = avg_dict(history_test, test_size)
-            total_avg_test = avg_dict_eval(test, [size / sum(test_size)
+            server_avg_test = avg_dict_eval(server_test, [size / sum(test_size)
                                                   for size in test_size])
 
-            if total_avg_test[1] > max_accuracy:  # Suppose 1st index is the test acc
-                max_accuracy = total_avg_test[1]
+            if server_avg_test[1] > max_accuracy:  # Suppose 1st index is the test acc
+                max_accuracy = server_avg_test[1]
                 max_acc_round = round_i
 
             # if avg_test['sparse_categorical_accuracy'] > max_accuracy:
@@ -105,7 +108,7 @@ class VirtualFedProcess(FedProcess):
             logger.debug(f"round: {round_i}, "
                          f"avg_train: {avg_train}, "
                          f"avg_test: {avg_test}, "
-                         f"avg_test on whole test data: {total_avg_test} "
+                         f"server_avg_test on whole test data: {server_avg_test} "
                          f"max accuracy so far: {max_accuracy} reached at "
                          f"round {max_acc_round}")
 
@@ -113,8 +116,10 @@ class VirtualFedProcess(FedProcess):
                 for i, key in enumerate(avg_train.keys()):
                     with self.train_summary_writer.as_default():
                         tf.summary.scalar(key, avg_train[key], step=round_i)
+                    #with self.test_summary_writer.as_default():
+                    #    tf.summary.scalar(key, server_avg_test[i], step=round_i)
                     with self.test_summary_writer.as_default():
-                        tf.summary.scalar(key, total_avg_test[i], step=round_i)
+                        tf.summary.scalar(key, avg_test[key], step=round_i)
                 # with self.test_summary_writer.as_default():
                 #     for key in total_avg_test.keys():
                 #         tf.summary.scalar(key, total_avg_test[key], step=round_i)
