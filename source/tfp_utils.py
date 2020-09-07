@@ -5,17 +5,16 @@ import tensorflow_probability as tfp
 from tensorflow_probability.python import distributions as tfd
 
 
-eps = 1/tf.float32.max
+eps = 1e-20
 softplus = tfp.bijectors.Softplus()
 precision_from_scale = tfp.bijectors.Chain([tfp.bijectors.Reciprocal(), tfp.bijectors.Square()])
 precision_from_untransformed_scale = tfp.bijectors.Chain([precision_from_scale, softplus])
 
 
 def loc_prod_from_locprec(loc_times_prec, sum_prec):
-    #TODO: check if condition tf.abs(sum_prec) > eps is ever satisfied and if the formula is stable
-    #TODO: in particular what if also tf.abs(sum_prec) < eps
-    return tf.where(tf.abs(sum_prec) > eps, tf.math.xdivy(loc_times_prec, sum_prec),
-                    tf.float32.max*tf.sign(loc_times_prec)*tf.sign(sum_prec))
+    loc = tf.math.xdivy(loc_times_prec, sum_prec)
+    loc = tf.clip_by_value(loc, -tf.float32.max, tf.float32.max)
+    return loc
 
 
 def loc_prod_from_precision(loc1, p1, loc2, p2):
@@ -54,6 +53,8 @@ def renormalize_mean_field_normal_fn(loc_ratio, prec_ratio):
         else:
             loc_reparametrized, scale_reparametrized = \
                 reparametrize_loc_scale(loc, prec, loc_ratio, prec_ratio)
+            tf.summary.histogram('loc', loc_reparametrized)
+            tf.summary.histogram('scale', scale_reparametrized)
             dist = tfd.Normal(loc=loc_reparametrized, scale=scale_reparametrized)
 
         batch_ndims = tf.size(dist.batch_shape_tensor())
@@ -83,10 +84,8 @@ def default_tensor_multivariate_normal_fn(loc_ratio, prec_ratio, num_clients, pr
 def tensor_loc_scale_fn(is_singular=False,
                         loc_initializer
                         =tf.random_normal_initializer(stddev=0.1),
-
                         untransformed_scale_initializer
                         =tf.random_normal_initializer(mean=-3., stddev=0.1),
-
                         loc_regularizer=None,
                         untransformed_scale_regularizer=None,
                         loc_constraint=None,
