@@ -41,8 +41,11 @@ class VirtualFedProcess(FedProcess):
             train_size=None, test_size=None, hierarchical=False):
 
         train_log_dir = logdir / 'train'
+        valid_log_dir = logdir / 'valid'
         self.train_summary_writer = \
             tf.summary.create_file_writer(str(train_log_dir))
+        self.valid_summary_writer = \
+            tf.summary.create_file_writer(str(valid_log_dir))
         self.test_summary_writer = tf.summary.create_file_writer(str(logdir))
 
         self.build(train_size, hierarchical)
@@ -109,6 +112,7 @@ class VirtualFedProcess(FedProcess):
                          f"avg_train: {avg_train}, "
                          f"avg_test: {avg_test}, "
                          f"server_avg_test on whole test data: {server_avg_test} "
+                         f"clients avg test: {avg_test}, "
                          f"max accuracy so far: {max_accuracy} reached at "
                          f"round {max_acc_round}")
 
@@ -119,6 +123,9 @@ class VirtualFedProcess(FedProcess):
                     #with self.test_summary_writer.as_default():
                     #    tf.summary.scalar(key, server_avg_test[i], step=round_i)
                     with self.test_summary_writer.as_default():
+                        tf.summary.scalar(key, avg_test[key], step=round_i)
+                        tf.summary.scalar(key, server_avg_test[i], step=round_i)
+                    with self.valid_summary_writer.as_default():
                         tf.summary.scalar(key, avg_test[key], step=round_i)
                 # with self.test_summary_writer.as_default():
                 #     for key in total_avg_test.keys():

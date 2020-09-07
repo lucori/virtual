@@ -53,7 +53,9 @@ def avg_dict(history_list, cards):
             keys = el.keys()
             continue
     for key in keys:
-        lists = list(zip(*[(history[key][-1]*card, card) for history, card in zip(history_list, cards) if history]))
+        lists = list(zip(*[(history[key][-1]*card, card)
+                           for history, card in zip(history_list, cards)
+                           if history]))
         avg_dict[key] = sum(lists[0])/sum(lists[1])
     return avg_dict
 

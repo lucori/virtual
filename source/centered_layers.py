@@ -30,7 +30,7 @@ class CenteredL2Regularizer(tf.keras.regularizers.Regularizer):
         return {'l2': float(self.l2), 'center': float(self.center.numpy())}
 
 
-class LayerCentered(tf.keras.layers.Layer):
+class LayerCentered:
 
     def compute_delta(self):
         delta_dict = {}

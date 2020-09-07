@@ -18,7 +18,8 @@ BATCH_SIZE = 20
 KL_WEIGHT = 1e-6
 scale_init = -5
 
-federated_train_data, federated_test_data, train_size, test_size = federated_dataset(data_set_conf)
+federated_train_data, federated_test_data, train_size, test_size = \
+    federated_dataset(data_set_conf)
 train_data = federated_train_data[0]
 test_data = federated_test_data[0]
 train_size = train_size[0]
@@ -65,6 +66,7 @@ model.compile(optimizer=tf.keras.optimizers.Adam(lr),
               metrics=['sparse_categorical_accuracy', tf.keras.metrics.SparseCategoricalAccuracy()],
               #run_eagerly=True
               )
+
 
 model.fit(train_data_batched, epochs=1000, validation_data=test_data_batched,
           callbacks=[CustomTensorboard(log_dir='logs/test/tfp_' + str(time.time()),  histogram_freq=1)])

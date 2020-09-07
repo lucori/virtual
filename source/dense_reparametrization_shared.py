@@ -94,19 +94,21 @@ class DenseShared(VariationalReparametrized):
             self.untransformed_scale_initializer = \
                 kwargs.pop('untransformed_scale_initializer')
 
-        super(DenseShared, self).__init__(units,
-                                          activation=activation,
-                                          activity_regularizer=activity_regularizer,
-                                          trainable=trainable,
-                                          kernel_posterior_fn=kernel_posterior_fn,
-                                          kernel_posterior_tensor_fn=kernel_posterior_tensor_fn,
-                                          kernel_prior_fn=kernel_prior_fn,
-                                          kernel_divergence_fn=kernel_divergence_fn,
-                                          bias_posterior_fn=bias_posterior_fn,
-                                          bias_posterior_tensor_fn=bias_posterior_tensor_fn,
-                                          bias_prior_fn=bias_prior_fn,
-                                          bias_divergence_fn=bias_divergence_fn,
-                                          **kwargs)
+        super(DenseShared, self).\
+            __init__(units,
+                     activation=activation,
+                     activity_regularizer=activity_regularizer,
+                     trainable=trainable,
+                     kernel_posterior_fn=kernel_posterior_fn,
+                     kernel_posterior_tensor_fn=kernel_posterior_tensor_fn,
+                     kernel_prior_fn=kernel_prior_fn,
+                     kernel_divergence_fn=kernel_divergence_fn,
+                     bias_posterior_fn=bias_posterior_fn,
+                     bias_posterior_tensor_fn=bias_posterior_tensor_fn,
+                     bias_prior_fn=bias_prior_fn,
+                     bias_divergence_fn=bias_divergence_fn,
+                     **kwargs)
+
         self.num_clients = num_clients
         self.prior_scale = prior_scale
         self.delta_function = lambda t1, t2: compute_gaussian_ratio(*t1, *t2)
@@ -127,9 +129,10 @@ class DenseShared(VariationalReparametrized):
         dtype = tf.as_dtype(self.dtype or tf.keras.backend.floatx())
         shape = [in_size, self.units]
         name = 'kernel'
-        self.kernel_posterior_fn, self.kernel_prior_fn = self.build_posterior_fn(shape, dtype, name,
-                                                                                 self.kernel_posterior_fn,
-                                                                                 self.kernel_prior_fn)
+        self.kernel_posterior_fn, self.kernel_prior_fn = \
+            self.build_posterior_fn(shape, dtype, name,
+                                    self.kernel_posterior_fn,
+                                    self.kernel_prior_fn)
         # Must have a posterior kernel.
         if self.untransformed_scale_initializer:
             self.kernel_posterior = self.kernel_posterior_fn(
@@ -163,9 +166,9 @@ class DenseShared(VariationalReparametrized):
                 dtype, [self.units], 'bias_prior',
                 self.trainable, self.add_variable)
 
-        self.client_variable_dict['kernel'] = LocPrecTuple((self.kernel_posterior.distribution.loc.pretransformed_input,
-                                                            self.kernel_posterior.distribution.scale
-                                                            .pretransformed_input.pretransformed_input))
+        self.client_variable_dict['kernel'] = LocPrecTuple((
+            self.kernel_posterior.distribution.loc.pretransformed_input,
+            self.kernel_posterior.distribution.scale.pretransformed_input.pretransformed_input))
         self.built = True
 
 

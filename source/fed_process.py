@@ -14,6 +14,7 @@ class FedProcess:
 
         self.train_summary_writer = None
         self.test_summary_writer = None
+        self.valid_summary_writer = None
 
     def build(self, *args, **kwargs):
         pass
