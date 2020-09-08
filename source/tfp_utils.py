@@ -4,8 +4,6 @@ import tensorflow as tf
 import tensorflow_probability as tfp
 from tensorflow_probability.python import distributions as tfd
 
-
-eps = 1e-20
 softplus = tfp.bijectors.Softplus()
 precision_from_scale = tfp.bijectors.Chain([tfp.bijectors.Reciprocal(), tfp.bijectors.Square()])
 precision_from_untransformed_scale = tfp.bijectors.Chain([precision_from_scale, softplus])
