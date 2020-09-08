@@ -11,6 +11,7 @@ precision_from_untransformed_scale = tfp.bijectors.Chain([precision_from_scale, 
 
 def loc_prod_from_locprec(loc_times_prec, sum_prec):
     loc = tf.math.xdivy(loc_times_prec, sum_prec)
+    tf.debugging.check_numerics(loc, 'division')
     loc = tf.clip_by_value(loc, -tf.float32.max, tf.float32.max)
     return loc
 
@@ -51,8 +52,6 @@ def renormalize_mean_field_normal_fn(loc_ratio, prec_ratio):
         else:
             loc_reparametrized, scale_reparametrized = \
                 reparametrize_loc_scale(loc, prec, loc_ratio, prec_ratio)
-            tf.summary.histogram('loc', loc_reparametrized)
-            tf.summary.histogram('scale', scale_reparametrized)
             dist = tfd.Normal(loc=loc_reparametrized, scale=scale_reparametrized)
 
         batch_ndims = tf.size(dist.batch_shape_tensor())

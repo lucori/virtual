@@ -47,6 +47,7 @@ class LayerCentered:
         for key in self.server_variable_dict.keys():
             add = self.apply_delta_function(self.server_variable_dict[key], delta[key])
             self.server_variable_dict[key].assign(add)
+            self.client_variable_dict[key].assign(add)
 
     def receive_and_save_weights(self, layer_server):
         for key in self.server_variable_dict.keys():
