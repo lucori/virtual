@@ -22,6 +22,20 @@ from source.tfp_utils import (renormalize_mean_field_normal_fn,
 inf = 1e15
 
 
+def generic_ratio(t1, t2):
+    if issubclass(t1.__class__, tuple) and issubclass(t2.__class__, tuple):
+        return compute_gaussian_ratio(*t1, *t2)
+    else:
+        return tf.subtract(t1, t2)
+
+
+def generic_prod(t1, t2):
+    if issubclass(t1.__class__, tuple) and issubclass(t2.__class__, tuple):
+        return compute_gaussian_prod(*t1, *t2)
+    else:
+        return tf.add(t1, t2)
+
+
 class VariationalReparametrized(LayerCentered):
 
     def build_posterior_fn(self, shape, dtype, name, posterior_fn, prior_fn):
@@ -63,11 +77,12 @@ class VariationalReparametrized(LayerCentered):
 
     def apply_damping(self, damping_factor):
         for key in self.server_variable_dict.keys():
-            loc, prec = self.apply_delta_function((self.client_variable_dict[key][0],
-                                                   self.client_variable_dict[key][1]*damping_factor),
-                                                  (self.client_center_variable_dict[key][0],
-                                                   self.client_center_variable_dict[key][1]*(1-damping_factor)))
-            self.client_variable_dict[key].assign((loc, prec))
+            if issubclass(self.client_variable_dict[key].__class__, tuple):
+                loc, prec = self.apply_delta_function((self.client_variable_dict[key][0],
+                                                       self.client_variable_dict[key][1]*damping_factor),
+                                                      (self.client_center_variable_dict[key][0],
+                                                       self.client_center_variable_dict[key][1]*(1-damping_factor)))
+                self.client_variable_dict[key].assign((loc, prec))
 
 
 class DenseShared(VariationalReparametrized):
@@ -111,8 +126,8 @@ class DenseShared(VariationalReparametrized):
 
         self.num_clients = num_clients
         self.prior_scale = prior_scale
-        self.delta_function = lambda t1, t2: compute_gaussian_ratio(*t1, *t2)
-        self.apply_delta_function = lambda t1, t2: compute_gaussian_prod(*t1, *t2)
+        self.delta_function = generic_ratio
+        self.apply_delta_function = generic_prod
         self.client_variable_dict = {}
         self.client_center_variable_dict = {}
         self.server_variable_dict = {}
@@ -169,6 +184,15 @@ class DenseShared(VariationalReparametrized):
         self.client_variable_dict['kernel'] = LocPrecTuple((
             self.kernel_posterior.distribution.loc.pretransformed_input,
             self.kernel_posterior.distribution.scale.pretransformed_input.pretransformed_input))
+
+        self.bias_center = self.add_weight('bias_center',
+                                           shape=[self.units, ],
+                                           initializer=tf.keras.initializers.constant(0.),
+                                           dtype=self.dtype,
+                                           trainable=False)
+        self.client_variable_dict['bias'] = self.bias_posterior.distribution.loc
+        self.server_variable_dict['bias'] = self.bias_posterior.distribution.loc
+        self.client_center_variable_dict['bias'] = self.bias_center
         self.built = True
 
 
