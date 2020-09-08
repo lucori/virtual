@@ -123,7 +123,6 @@ class VirtualFedProcess(FedProcess):
                     #with self.test_summary_writer.as_default():
                     #    tf.summary.scalar(key, server_avg_test[i], step=round_i)
                     with self.test_summary_writer.as_default():
-                        tf.summary.scalar(key, avg_test[key], step=round_i)
                         tf.summary.scalar(key, server_avg_test[i], step=round_i)
                     with self.valid_summary_writer.as_default():
                         tf.summary.scalar(key, avg_test[key], step=round_i)
