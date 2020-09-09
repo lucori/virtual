@@ -132,7 +132,7 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                 layer_class = RNNVarReparametrized
 
             layer_params.pop('name', None)
-            layers.append(layer_class(**layer_params, dtype=tf.float64))
+            layers.append(layer_class(**layer_params))
         return model_class(layers)
 
     def create_model_hierarchical(model_class=tf.keras.Model, train_size=None):
