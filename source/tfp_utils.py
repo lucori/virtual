@@ -7,12 +7,38 @@ from tensorflow_probability.python import distributions as tfd
 softplus = tfp.bijectors.Softplus()
 precision_from_scale = tfp.bijectors.Chain([tfp.bijectors.Reciprocal(), tfp.bijectors.Square()])
 precision_from_untransformed_scale = tfp.bijectors.Chain([precision_from_scale, softplus])
+CLIP_VALUE = 1e15
+
+
+class SoftClip(tfp.bijectors.Bijector):
+
+    def __init__(self, low=None, high=None):
+        self.low = low
+        if self.low is None:
+            self.low = -1e7
+        self.high = high
+        if self.high is None:
+            self.high = 1e7
+
+    def forward(self, x, name='forward', **kwargs):
+        x_type = x.dtype
+        x = tf.cast(x, tf.float64)
+        self.low = tf.cast(self.low, x.dtype)
+        self.high = tf.cast(self.high, x.dtype)
+        return tf.cast(-softplus.forward(self.high - self.low - softplus.forward(x - self.low)) * \
+                       (self.high - self.low) / (softplus.forward(self.high - self.low)) + self.high, x_type)
+
+    def inverse(self, y, name='inverse', **kwargs):
+        y_type = y.dtype
+        y = tf.cast(y, tf.float64)
+        return tf.cast(+softplus.inverse(self.high - self.low - softplus.inverse(
+            (self.high - y) / (self.high - self.low) * softplus.forward(self.high - self.low))), y_type)
 
 
 def loc_prod_from_locprec(loc_times_prec, sum_prec):
-    loc = tf.math.xdivy(loc_times_prec, sum_prec)
-    tf.debugging.check_numerics(loc, 'division')
-    loc = tf.clip_by_value(loc, -tf.float32.max, tf.float32.max)
+    rec = tf.math.xdivy(1., sum_prec)
+    rec = tf.clip_by_value(rec, -CLIP_VALUE, CLIP_VALUE)
+    loc = tf.multiply(loc_times_prec, rec)
     return loc
 
 
