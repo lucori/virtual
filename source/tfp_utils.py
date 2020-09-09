@@ -11,8 +11,8 @@ precision_from_untransformed_scale = tfp.bijectors.Chain([precision_from_scale, 
 
 def loc_prod_from_locprec(loc_times_prec, sum_prec):
     loc = tf.math.xdivy(loc_times_prec, sum_prec)
-    tf.debugging.check_numerics(loc, 'division')
     loc = tf.clip_by_value(loc, -tf.float32.max, tf.float32.max)
+
     return loc
 
 
