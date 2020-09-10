@@ -39,22 +39,28 @@ def generic_prod(t1, t2):
 class VariationalReparametrized(LayerCentered):
 
     def build_posterior_fn(self, shape, dtype, name, posterior_fn, prior_fn):
-        s_loc = self.add_variable(name=name+'_s_loc', shape=shape, dtype=dtype, trainable=False,
+        s_loc = self.add_variable(name=name+'_s_loc', shape=shape, dtype=dtype,
+                                  trainable=False,
                                   initializer=tf.keras.initializers.zeros)
-        scale_init = tf.random_normal_initializer(mean=+inf, stddev=0.).__call__(shape=shape)
-        scale_init = softplus.inverse(softplus.forward(scale_init) / math.sqrt(self.num_clients))
-        s_untransformed_scale = self.add_variable(name=name+'_s_untransformed_scale', shape=shape,
-                                                  dtype=dtype,
-                                                  trainable=False,
-                                                  initializer=tf.keras.initializers.constant(scale_init.numpy()))
-        s_prec = tfp.util.DeferredTensor(s_untransformed_scale, precision_from_untransformed_scale)
-        s_i_loc = self.add_variable(name=name+'_s_i_loc', shape=shape, dtype=dtype, trainable=False,
-                                                               initializer=tf.keras.initializers.zeros)
-        s_i_untransformed_scale = self.add_variable(name=name+'_s_i_untransformed_scale', shape=shape,
-                                                    dtype=dtype,
-                                                    trainable=False,
-                                                    initializer=tf.random_normal_initializer(mean=+inf, stddev=0.))
-        s_i_prec = tfp.util.DeferredTensor(s_i_untransformed_scale, precision_from_untransformed_scale)
+        scale_init = tf.random_normal_initializer(
+            mean=+inf, stddev=0.).__call__(shape=shape)
+        scale_init = softplus.inverse(
+            softplus.forward(scale_init) / math.sqrt(self.num_clients))
+        s_untransformed_scale = self.add_variable(
+            name=name+'_s_untransformed_scale', shape=shape, dtype=dtype,
+            trainable=False,
+            initializer=tf.keras.initializers.constant(scale_init.numpy()))
+        s_prec = tfp.util.DeferredTensor(
+            s_untransformed_scale, precision_from_untransformed_scale)
+        s_i_loc = self.add_variable(name=name+'_s_i_loc', shape=shape,
+                                    dtype=dtype, trainable=False,
+                                    initializer=tf.keras.initializers.zeros)
+        s_i_untransformed_scale = self.add_variable(
+            name=name+'_s_i_untransformed_scale', shape=shape,
+            dtype=dtype, trainable=False,
+            initializer=tf.random_normal_initializer(mean=+tf.float32.max, stddev=0.))
+        s_i_prec = tfp.util.DeferredTensor(
+            s_i_untransformed_scale, precision_from_untransformed_scale)
         prec_ratio = tfp.util.DeferredTensor(s_prec, lambda x: x - s_i_prec)
 
         def loc_reparametrization_fn(x):
@@ -62,15 +68,18 @@ class VariationalReparametrized(LayerCentered):
 
         loc_ratio = tfp.util.DeferredTensor(s_loc, loc_reparametrization_fn)
         posterior_fn = posterior_fn(loc_ratio, prec_ratio)
-        prior_fn = prior_fn(loc_ratio, prec_ratio, self.num_clients, self.prior_scale)
+        prior_fn = prior_fn(loc_ratio, prec_ratio,
+                            self.num_clients, self.prior_scale)
 
         self.server_variable_dict[name] = LocPrecTuple((s_loc, s_prec))
         self.client_center_variable_dict[name] = LocPrecTuple((s_i_loc, s_i_prec))
+
         return posterior_fn, prior_fn
 
     def initialize_kernel_posterior(self):
         for key in self.client_variable_dict.keys():
-            self.client_variable_dict[key][0].assign(self.server_variable_dict[key][0])
+            self.client_variable_dict[key][0].assign(
+                self.server_variable_dict[key][0])
             self.client_variable_dict[key][1].variables[0].assign(
                 softplus.inverse(softplus.forward(
                     self.server_variable_dict[key][1].variables[0])*math.sqrt(self.num_clients)))

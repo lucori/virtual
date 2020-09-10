@@ -41,6 +41,7 @@ def loc_prod_from_locprec(loc_times_prec, sum_prec):
     rec = tf.math.xdivy(1., sum_prec)
     rec = tf.clip_by_value(rec, -CLIP_VALUE, CLIP_VALUE)
     loc = tf.multiply(loc_times_prec, rec)
+
     return loc
 
 
