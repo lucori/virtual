@@ -27,6 +27,7 @@ from source.dense_reparametrization_shared import RNNReparametrized
 from source.dense_reparametrization_shared import GaussianEmbedding
 from source.dense_reparametrization_shared import LSTMCellVariational
 from source.dense_reparametrization_shared import LSTMCellReparametrization
+from source.natural_raparametrization_layer import DenseReparametrizationNaturalShared
 from source.tfp_utils import precision_from_untransformed_scale
 from source.constants import ROOT_LOGGER_STR
 from tensorflow_probability.python.layers import DenseReparameterization
@@ -77,6 +78,17 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                 layer_params['untransformed_scale_initializer'] = \
                     tf.random_normal_initializer(mean=untransformed_scale,
                                                  stddev=scale_init[1])
+
+            if ('prec_init' in dict_conf
+                    and (issubclass(layer_class, DenseShared)
+                         or layer_class == Conv2DVirtual)):
+                prec_init = dict_conf['prec_init']
+                prec_init = prec_init[0]
+                if prec_init[0] == 'auto':
+                    prec = tf.constant(train_size, dtype=tf.float32)
+                layer_params['precision_initializer'] = \
+                    tf.random_normal_initializer(mean=prec,
+                                                 stddev=prec_init[1])
 
             if layer_class == DenseReparameterization:
                 layer_params['kernel_divergence_fn'] = kernel_divergence_fn
