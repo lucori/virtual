@@ -1,12 +1,10 @@
-import math
 import tensorflow as tf
 import tensorflow_probability as tfp
 from tensorflow_probability.python import distributions as tfd
 from tensorflow_probability.python.layers import util as tfp_layers_util
 from source.centered_layers import LayerCentered
-from source.tfp_utils import (natural_initializer_fn,
-                              natural_prior_initializer_fn)
-from normal_natural import NormalNatural
+from source.tfp_utils import precision_from_untransformed_scale
+from source.normal_natural import NormalNatural
 
 
 class VariationalReparametrizedNatural(LayerCentered):
@@ -90,6 +88,7 @@ class VariationalReparametrizedNatural(LayerCentered):
             natural_reparametrized = tfp.util.DeferredTensor(natural, lambda x: x + ratio_par)
             gamma = tfp.util.DeferredTensor(natural_reparametrized, lambda x: x[..., 0], shape=shape)
             prec = tfp.util.DeferredTensor(natural_reparametrized, lambda x: x[..., 1], shape=shape)
+            #TODO: we should use the num_clients to scale the prior
             dist = NormalNatural(gamma=gamma, prec=prec)
             batch_ndims = tf.size(input=dist.batch_shape_tensor())
             return tfd.Independent(dist, reinterpreted_batch_ndims=batch_ndims)
@@ -210,3 +209,29 @@ class DenseSharedNatural(VariationalReparametrizedNatural):
 
 class DenseReparametrizationNaturalShared(DenseSharedNatural, tfp.layers.DenseReparameterization):
     pass
+
+
+def natural_initializer_fn(loc_stdev=0.1, u_scale_init_avg=-5, u_scale_init_stdev=0.1):
+    loc_init = tf.random_normal_initializer(stddev=loc_stdev)
+    u_scale_init = tf.random_normal_initializer(mean=u_scale_init_avg, stddev=u_scale_init_stdev)
+
+    def natural_initializer(shape, dtype=tf.float32):
+        prec = precision_from_untransformed_scale(u_scale_init(shape[:-1], dtype))
+        gamma = loc_init(shape[:-1], dtype) * prec
+        natural = tf.stack([gamma, prec], axis=-1)
+        return natural
+
+    return natural_initializer
+
+
+def natural_prior_initializer_fn():
+    gamma_init = tf.constant_initializer(0.)
+    precision_init = tf.constant_initializer(1.)
+
+    def natural_initializer(shape, dtype):
+        prec = precision_init(shape[:-1], dtype)
+        gamma = gamma_init(shape[:-1], dtype)
+        natural = tf.stack([gamma, prec], axis=-1)
+        return natural
+
+    return natural_initializer

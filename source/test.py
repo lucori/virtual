@@ -21,7 +21,7 @@ data_set_conf = {"name": "femnist", "num_clients": 1}
 
 lr = 20.
 BATCH_SIZE = 20
-KL_WEIGHT = 0.
+KL_WEIGHT = 0.000001
 scale_init = -5
 prec_init = 20000.
 seed = 0
@@ -66,9 +66,7 @@ class CustomTensorboard(tf.keras.callbacks.TensorBoard):
             self._log_embeddings(epoch)
 
 
-kernel_divergence_fn = (lambda q, p, ignore: 0.
-                        #KL_WEIGHT * kl_lib.kl_divergence(q, p) / train_size
-                        )
+kernel_divergence_fn = (lambda q, p, ignore: KL_WEIGHT * kl_lib.kl_divergence(q, p) / train_size)
 kernel_posterior_fn = renormalize_mean_field_normal_fn
 #kernel_posterior_fn = default_mean_field_normal_fn(
 #    untransformed_scale_initializer=tf1.initializers.random_normal(

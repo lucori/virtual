@@ -162,29 +162,3 @@ class LocPrecTuple(tuple):
     def assign(self, loc_prec_tuple):
         self[0].assign(loc_prec_tuple[0])
         self[1].variables[0].assign(precision_from_untransformed_scale.inverse(loc_prec_tuple[1]))
-
-
-def natural_initializer_fn(loc_stdev=0.1, u_scale_init_avg=-5, u_scale_init_stdev=0.1):
-    loc_init = tf.random_normal_initializer(stddev=loc_stdev)
-    u_scale_init = tf.random_normal_initializer(mean=u_scale_init_avg, stddev=u_scale_init_stdev)
-
-    def natural_initializer(shape, dtype=tf.float32):
-        prec = precision_from_untransformed_scale(u_scale_init(shape[:-1], dtype))
-        gamma = loc_init(shape[:-1], dtype) * prec
-        natural = tf.stack([gamma, prec], axis=-1)
-        return natural
-
-    return natural_initializer
-
-
-def natural_prior_initializer_fn():
-    gamma_init = tf.constant_initializer(0.)
-    precision_init = tf.constant_initializer(1.)
-
-    def natural_initializer(shape, dtype):
-        prec = precision_init(shape[:-1], dtype)
-        gamma = gamma_init(shape[:-1], dtype)
-        natural = tf.stack([gamma, prec], axis=-1)
-        return natural
-
-    return natural_initializer

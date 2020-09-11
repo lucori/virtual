@@ -1,12 +1,7 @@
-import math
-
 import tensorflow as tf
 import tensorflow_probability as tfp
 from tensorflow_probability.python import distributions as tfd
 import numpy as np
-
-import tensorflow.compat.v2 as tf
-
 from tensorflow_probability.python.bijectors import identity as identity_bijector
 from tensorflow_probability.python.internal import assert_util
 from tensorflow_probability.python.internal import dtype_util
