@@ -8,8 +8,6 @@ import numpy as np
 import tensorflow.compat.v2 as tf
 
 from tensorflow_probability.python.bijectors import identity as identity_bijector
-from tensorflow_probability.python.distributions import distribution
-from tensorflow_probability.python.distributions import kullback_leibler
 from tensorflow_probability.python.internal import assert_util
 from tensorflow_probability.python.internal import dtype_util
 from tensorflow_probability.python.internal import prefer_static
@@ -56,11 +54,11 @@ class NormalNatural(tfd.Distribution):
             self._prec = tensor_util.convert_nonref_to_tensor(
                 prec, dtype=dtype, name='prec')
             super(NormalNatural, self).__init__(dtype=dtype,
-                                             reparameterization_type=reparameterization.FULLY_REPARAMETERIZED,
-                                             validate_args=validate_args,
-                                             allow_nan_stats=allow_nan_stats,
-                                             parameters=parameters,
-                                             name=name)
+                                                reparameterization_type=reparameterization.FULLY_REPARAMETERIZED,
+                                                validate_args=validate_args,
+                                                allow_nan_stats=allow_nan_stats,
+                                                parameters=parameters,
+                                                name=name)
 
     @staticmethod
     def _param_shapes(sample_shape):
@@ -103,7 +101,7 @@ class NormalNatural(tfd.Distribution):
                           axis=0)
         sampled = tf.random.normal(
             shape=shape, mean=0., stddev=1., dtype=self.dtype, seed=seed)
-        return sampled / tf.math.sqrt(prec) + gamma / prec
+        return tf.math.divide(sampled, tf.math.sqrt(prec)) + tf.math.divide(gamma, prec)
 
     def _log_prob(self, x):
         prec = tf.convert_to_tensor(self.prec)
@@ -137,7 +135,7 @@ class NormalNatural(tfd.Distribution):
         return special_math.ndtri(p) * self._stddev() + self._mean()
 
     def _stddev(self):
-        return tf.math.sqrt(1. / self.scale) * tf.ones_like(self.gamma)
+        return tf.math.sqrt(1. / self.prec) * tf.ones_like(self.gamma)
 
     _mode = _mean
 

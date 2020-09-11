@@ -3,51 +3,28 @@ import tensorflow as tf
 import tensorflow_probability as tfp
 from tensorflow_probability.python import distributions as tfd
 from tensorflow_probability.python.layers import util as tfp_layers_util
-
-
 from source.centered_layers import LayerCentered
-from source.tfp_utils import (renormalize_natural_mean_field_normal_fn,
-                              natural_tensor_multivariate_normal_fn,
-                              NaturalParTuple)
-
-
-def natural_function(fun):
-    def fn(t1, t2):
-        result = []
-        if issubclass(t1.__class__, tuple):
-            for par1, par2 in zip(list(t1), list(t2)):
-                result.append(fun(par1, par2))
-            result = NaturalParTuple(result)
-        else:
-            result = fun(t1, t2)
-        return result
-    return fn
-
-
-natural_ratio = natural_function(tf.subtract)
-natural_prod = natural_function(tf.add)
+from source.tfp_utils import (natural_initializer_fn,
+                              natural_prior_initializer_fn)
+from normal_natural import NormalNatural
 
 
 class VariationalReparametrizedNatural(LayerCentered):
 
     def build_posterior_fn_natural(self, shape, dtype, name, posterior_fn, prior_fn):
-        server_gamma = self.add_variable(name=name+'_server_gamma', shape=shape, dtype=dtype, trainable=False,
-                                         initializer=tf.keras.initializers.zeros)
-        server_prec = self.add_variable(name=name+'_server_precision', shape=shape, dtype=dtype, trainable=False,
-                                        initializer=tf.keras.initializers.zeros)
-        client_gamma = self.add_variable(name=name+'_client_gamma', shape=shape, dtype=dtype, trainable=False,
-                                         initializer=tf.keras.initializers.zeros)
-        client_prec = self.add_variable(name=name + '_client_precision', shape=shape, dtype=dtype, trainable=False,
-                                         initializer=tf.keras.initializers.zeros)
+        natural_par_shape = shape + [2]
+        server_par = self.add_variable(name=name+'_server_par', shape=natural_par_shape, dtype=dtype, trainable=False,
+                                       initializer=tf.keras.initializers.zeros)
+        client_par = self.add_variable(name=name+'_client_par', shape=natural_par_shape, dtype=dtype, trainable=False,
+                                       initializer=tf.keras.initializers.zeros)
 
-        ratio_prec = tfp.util.DeferredTensor(server_prec, lambda x: x - client_prec)
-        ratio_gamma = tfp.util.DeferredTensor(server_gamma, lambda x: x - client_gamma)
+        ratio_par = tfp.util.DeferredTensor(server_par, lambda x: x - client_par)
 
-        posterior_fn = posterior_fn(ratio_gamma, ratio_prec)
-        prior_fn = prior_fn(ratio_gamma, ratio_prec, self.num_clients, self.prior_scale)
+        posterior_fn = posterior_fn(ratio_par)
+        prior_fn = prior_fn(ratio_par, self.num_clients, self.prior_scale)
 
-        self.server_variable_dict[name] = NaturalParTuple((server_gamma, server_prec))
-        self.client_center_variable_dict[name] = NaturalParTuple((client_gamma, client_prec))
+        self.server_variable_dict[name] = server_par
+        self.client_center_variable_dict[name] = client_par
         return posterior_fn, prior_fn
 
     def initialize_kernel_posterior(self):
@@ -57,11 +34,67 @@ class VariationalReparametrizedNatural(LayerCentered):
     def apply_damping(self, damping_factor):
         for key in self.server_variable_dict.keys():
             if issubclass(self.client_variable_dict[key].__class__, tuple):
-                gamma, prec = self.apply_delta_function((self.client_variable_dict[key][0]*damping_factor,
-                                                       self.client_variable_dict[key][1]*damping_factor),
-                                                      (self.client_center_variable_dict[key][0]*(1-damping_factor),
-                                                       self.client_center_variable_dict[key][1]*(1-damping_factor)))
-                self.client_variable_dict[key].assign((gamma, prec))
+                damped = self.apply_delta_function(self.client_variable_dict[key] * damping_factor,
+                                                        self.client_center_variable_dict[key] * (1-damping_factor))
+                self.client_variable_dict[key].assign(damped)
+
+    def renormalize_natural_mean_field_normal_fn(self, ratio_par):
+        natural_initializer = natural_initializer_fn(loc_stdev=0.1, u_scale_init_avg=-5, u_scale_init_stdev=0.1)
+
+        def _fn(dtype, shape, name, trainable, add_variable_fn,
+                natural_initializer=natural_initializer,
+                natural_regularizer=None, natural_constraint=None,
+                **kwargs):
+            natural_par_fn = self.tensor_natural_par_fn(natural_initializer=natural_initializer,
+                                                        natural_regularizer=natural_regularizer,
+                                                        natural_constraint=natural_constraint,
+                                                        **kwargs)
+            natural = natural_par_fn(dtype, shape, name, trainable, add_variable_fn)
+            self.client_variable_dict['kernel'] = natural
+            natural_reparametrized = tfp.util.DeferredTensor(natural, lambda x: x + ratio_par)
+            gamma = tfp.util.DeferredTensor(natural_reparametrized, lambda x: x[..., 0], shape=shape)
+            prec = tfp.util.DeferredTensor(natural_reparametrized, lambda x: x[..., 1], shape=shape)
+            dist = NormalNatural(gamma=gamma, prec=prec)
+            batch_ndims = tf.size(dist.batch_shape_tensor())
+            return tfd.Independent(dist, reinterpreted_batch_ndims=batch_ndims)
+
+        return _fn
+
+    def tensor_natural_par_fn(self, is_singular=False, natural_initializer=tf.constant_initializer(0.),
+                              natural_regularizer=None, natural_constraint=None,
+                              **kwargs):
+        def _fn(dtype, shape, name, trainable, add_variable_fn):
+            """Creates 'natural' parameters."""
+            natural = add_variable_fn(
+                name=name + '_natural',
+                shape=shape + [2],
+                initializer=natural_initializer,
+                regularizer=natural_regularizer,
+                constraint=natural_constraint,
+                dtype=dtype,
+                trainable=trainable,
+                **kwargs)
+            return natural
+
+        return _fn
+
+    def natural_tensor_multivariate_normal_fn(self, ratio_par, num_clients, prior_scale=1.):
+        def _fn(dtype, shape, name, trainable, add_variable_fn, initializer=natural_prior_initializer_fn(),
+                regularizer=None, constraint=None, **kwargs):
+            del trainable
+            natural_par_fn = self.tensor_natural_par_fn(natural_initializer=initializer,
+                                                        natural_regularizer=regularizer,
+                                                        natural_constraint=constraint,
+                                                        **kwargs)
+            natural = natural_par_fn(dtype, shape, name, False, add_variable_fn)
+            natural_reparametrized = tfp.util.DeferredTensor(natural, lambda x: x + ratio_par)
+            gamma = tfp.util.DeferredTensor(natural_reparametrized, lambda x: x[..., 0], shape=shape)
+            prec = tfp.util.DeferredTensor(natural_reparametrized, lambda x: x[..., 1], shape=shape)
+            dist = NormalNatural(gamma=gamma, prec=prec)
+            batch_ndims = tf.size(input=dist.batch_shape_tensor())
+            return tfd.Independent(dist, reinterpreted_batch_ndims=batch_ndims)
+
+        return _fn
 
 
 class DenseSharedNatural(VariationalReparametrizedNatural):
@@ -72,9 +105,9 @@ class DenseSharedNatural(VariationalReparametrizedNatural):
                  num_clients=1,
                  prior_scale=1.,
                  trainable=True,
-                 kernel_posterior_fn=renormalize_natural_mean_field_normal_fn,
+                 kernel_posterior_fn=None,
                  kernel_posterior_tensor_fn=(lambda d: d.sample()),
-                 kernel_prior_fn=natural_tensor_multivariate_normal_fn,
+                 kernel_prior_fn=None,
                  kernel_divergence_fn=(lambda q, p, ignore: tfd.kl_divergence(q, p)),
                  bias_posterior_fn=tfp_layers_util.default_mean_field_normal_fn(is_singular=True),
                  bias_posterior_tensor_fn=(lambda d: d.sample()),
@@ -87,6 +120,11 @@ class DenseSharedNatural(VariationalReparametrizedNatural):
         if 'precision_initializer' in kwargs:
             self.precision_initializer = \
                 kwargs.pop('precision_initializer')
+
+        if kernel_posterior_fn is None:
+            kernel_posterior_fn = self.renormalize_natural_mean_field_normal_fn
+        if kernel_prior_fn is None:
+            kernel_prior_fn = self.natural_tensor_multivariate_normal_fn
 
         super(DenseSharedNatural, self).\
             __init__(units,
@@ -105,8 +143,8 @@ class DenseSharedNatural(VariationalReparametrizedNatural):
 
         self.num_clients = num_clients
         self.prior_scale = prior_scale
-        self.delta_function = natural_ratio
-        self.apply_delta_function = natural_prod
+        self.delta_function = tf.subtract
+        self.apply_delta_function = tf.add
         self.client_variable_dict = {}
         self.client_center_variable_dict = {}
         self.server_variable_dict = {}
@@ -158,18 +196,15 @@ class DenseSharedNatural(VariationalReparametrizedNatural):
                 dtype, [self.units], 'bias_prior',
                 self.trainable, self.add_variable)
 
-        self.client_variable_dict['kernel'] = NaturalParTuple((
-            self.kernel_posterior.distribution.gamma.pretransformed_input,
-            self.kernel_posterior.distribution.prec.pretransformed_input))
-
-        self.bias_center = self.add_weight('bias_center',
-                                           shape=[self.units, ],
-                                           initializer=tf.keras.initializers.constant(0.),
-                                           dtype=self.dtype,
-                                           trainable=False)
-        self.client_variable_dict['bias'] = self.bias_posterior.distribution.loc
-        self.server_variable_dict['bias'] = self.bias_posterior.distribution.loc
-        self.client_center_variable_dict['bias'] = self.bias_center
+        if self.bias_posterior:
+            self.bias_center = self.add_weight('bias_center',
+                                               shape=[self.units, ],
+                                               initializer=tf.keras.initializers.constant(0.),
+                                               dtype=self.dtype,
+                                               trainable=False)
+            self.client_variable_dict['bias'] = self.bias_posterior.distribution.loc
+            self.server_variable_dict['bias'] = self.bias_posterior.distribution.loc
+            self.client_center_variable_dict['bias'] = self.bias_center
         self.built = True
 
 

@@ -13,14 +13,13 @@ from tensorflow.python.ops import summary_ops_v2
 from tensorflow.python.framework import ops
 from tensorflow.python.keras import backend as K
 from natural_raparametrization_layer import DenseReparametrizationNaturalShared
-from tfp_utils import precision_from_untransformed_scale, renormalize_natural_mean_field_normal_fn
 from normal_natural import NormalNatural
 
 #gpu_session(1)
 
 data_set_conf = {"name": "femnist", "num_clients": 1}
 
-lr = 0.001
+lr = 20.
 BATCH_SIZE = 20
 KL_WEIGHT = 0.
 scale_init = -5
@@ -67,12 +66,13 @@ class CustomTensorboard(tf.keras.callbacks.TensorBoard):
             self._log_embeddings(epoch)
 
 
-kernel_divergence_fn = (lambda q, p, ignore: KL_WEIGHT * kl_lib.kl_divergence(q, p) / train_size)
-#kernel_posterior_fn = renormalize_mean_field_normal_fn
+kernel_divergence_fn = (lambda q, p, ignore: 0.
+                        #KL_WEIGHT * kl_lib.kl_divergence(q, p) / train_size
+                        )
+kernel_posterior_fn = renormalize_mean_field_normal_fn
 #kernel_posterior_fn = default_mean_field_normal_fn(
 #    untransformed_scale_initializer=tf1.initializers.random_normal(
 #        mean=scale_init, stddev=0.1))
-kernel_posterior_fn = renormalize_natural_mean_field_normal_fn
 
 #untransformed_scale_initializer = tf.random_normal_initializer(mean=scale_init, stddev=0.1)
 #layer = DenseReparametrizationShared
@@ -82,9 +82,10 @@ precision_initializer = tf.random_normal_initializer(mean=prec_init, stddev=1)
 
 
 param_dict = {#'untransformed_scale_initializer': untransformed_scale_initializer,
-              'precision_initializer': precision_initializer,
-              'kernel_posterior_fn': kernel_posterior_fn,
-              'kernel_divergence_fn': kernel_divergence_fn
+              #'precision_initializer': precision_initializer,
+              #'kernel_posterior_fn': kernel_posterior_fn,
+              'kernel_divergence_fn': kernel_divergence_fn,
+              'bias_posterior_fn': None
               }
 
 model = tf.keras.Sequential([layer(100, input_shape=[784], activation="relu", **param_dict),

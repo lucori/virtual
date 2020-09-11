@@ -4,7 +4,9 @@ import tensorflow as tf
 import tensorflow_probability as tfp
 from tensorflow_probability.python import distributions as tfd
 import tensorflow.compat.v2 as tf
-from normal_natural import NormalNatural
+from tensorflow_probability.python.internal import dtype_util
+from tensorflow_probability.python.internal import tensorshape_util
+
 
 softplus = tfp.bijectors.Softplus()
 precision_from_scale = tfp.bijectors.Chain([tfp.bijectors.Reciprocal(), tfp.bijectors.Square()])
@@ -82,7 +84,7 @@ def renormalize_mean_field_normal_fn(loc_ratio, prec_ratio):
             loc_reparametrized, scale_reparametrized = \
                 reparametrize_loc_scale(loc, prec, loc_ratio, prec_ratio)
             dist = tfd.Normal(loc=loc_reparametrized, scale=scale_reparametrized)
-
+            print(dist.loc.__class__, dist.scale.__class__)
         batch_ndims = tf.size(dist.batch_shape_tensor())
         return tfd.Independent(dist, reinterpreted_batch_ndims=batch_ndims)
     return _fn
@@ -162,89 +164,27 @@ class LocPrecTuple(tuple):
         self[1].variables[0].assign(precision_from_untransformed_scale.inverse(loc_prec_tuple[1]))
 
 
-class NaturalParTuple(tuple):
-
-    def assign(self, natural_par_tuple):
-        for el, par_el in zip(self, natural_par_tuple):
-            el.assign(par_el)
-
-
-def gamma_prec_initializer(loc_stdev=0.1, u_scale_init_avg=-5, u_scale_init_stdev=0.1):
+def natural_initializer_fn(loc_stdev=0.1, u_scale_init_avg=-5, u_scale_init_stdev=0.1):
     loc_init = tf.random_normal_initializer(stddev=loc_stdev)
-    u_scale_init = tf.random_normal_initializer(u_scale_init_avg, stddev=u_scale_init_stdev)
-    prec_init = lambda *args, **kwargs: precision_from_untransformed_scale(u_scale_init(*args, **kwargs))
-    gamma_init = lambda *args, **kwargs: loc_init(*args, **kwargs) * prec_init(*args, **kwargs)
-    return gamma_init, prec_init
+    u_scale_init = tf.random_normal_initializer(mean=u_scale_init_avg, stddev=u_scale_init_stdev)
+
+    def natural_initializer(shape, dtype=tf.float32):
+        prec = precision_from_untransformed_scale(u_scale_init(shape[:-1], dtype))
+        gamma = loc_init(shape[:-1], dtype) * prec
+        natural = tf.stack([gamma, prec], axis=-1)
+        return natural
+
+    return natural_initializer
 
 
-def renormalize_natural_mean_field_normal_fn(ratio_gamma, ratio_prec):
-    gamma_initializer, precision_initializer = gamma_prec_initializer(loc_stdev=0.1, u_scale_init_avg=-5,
-                                                                      u_scale_init_stdev=0.1)
-    def _fn(dtype, shape, name, trainable, add_variable_fn,
-            gamma_initializer=gamma_initializer,
-            gamma_regularizer=None, gamma_constraint=None,
-            precision_initializer=precision_initializer,
-            **kwargs):
-        gamma_prec_fn = tensor_gamma_prec_fn(gamma_initializer=gamma_initializer,
-                                             gamma_regularizer=gamma_regularizer,
-                                             gamma_constraint=gamma_constraint,
-                                             precision_initializer=precision_initializer,
-                                             **kwargs)
+def natural_prior_initializer_fn():
+    gamma_init = tf.constant_initializer(0.)
+    precision_init = tf.constant_initializer(1.)
 
-        gamma, prec = gamma_prec_fn(dtype, shape, name, trainable, add_variable_fn)
-        gamma_reparametrized = tfp.util.DeferredTensor(gamma, lambda x: x + ratio_gamma)
-        prec_reparametrized = tfp.util.DeferredTensor(prec, lambda x: x + ratio_prec)
-        dist = NormalNatural(gamma=gamma_reparametrized, prec=prec_reparametrized)
+    def natural_initializer(shape, dtype):
+        prec = precision_init(shape[:-1], dtype)
+        gamma = gamma_init(shape[:-1], dtype)
+        natural = tf.stack([gamma, prec], axis=-1)
+        return natural
 
-        batch_ndims = tf.size(dist.batch_shape_tensor())
-        return tfd.Independent(dist, reinterpreted_batch_ndims=batch_ndims)
-    return _fn
-
-
-def tensor_gamma_prec_fn(is_singular=False, gamma_initializer=tf.random_normal_initializer(stddev=10.),
-                         precision_initializer=tf.random_normal_initializer(mean=20000., stddev=100.),
-                         gamma_regularizer=None, precision_regularizer=None, gamma_constraint=None,
-                         precision_constraint=None,
-                         **kwargs):
-    def _fn(dtype, shape, name, trainable, add_variable_fn):
-        """Creates `gamma`, `prec` parameters."""
-        gamma = add_variable_fn(
-            name=name + '_gamma',
-            shape=shape,
-            initializer=gamma_initializer,
-            regularizer=gamma_regularizer,
-            constraint=gamma_constraint,
-            dtype=dtype,
-            trainable=trainable,
-            **kwargs)
-        if is_singular:
-            return gamma, None
-        prec = add_variable_fn(
-            name=name + '_prec',
-            shape=shape,
-            initializer=precision_initializer,
-            regularizer=precision_regularizer,
-            constraint=precision_constraint,
-            dtype=dtype,
-            trainable=trainable,
-            **kwargs)
-        return gamma, prec
-    return _fn
-
-
-def natural_tensor_multivariate_normal_fn(ratio_gamma, ratio_prec, num_clients, prior_scale=1.):
-    def _fn(dtype, shape, name, trainable, add_variable_fn, initializer=tf.keras.initializers.constant(0.),
-            regularizer=None, constraint=None, **kwargs):
-        del trainable
-        gamma_prec_fn = tensor_gamma_prec_fn(gamma_initializer=initializer,
-                                             gamma_regularizer=regularizer,
-                                             gamma_constraint=constraint,
-                                             precision_initializer=tf.keras.initializers.constant(1./num_clients),
-                                             **kwargs)
-        gamma, prec = gamma_prec_fn(dtype, shape, name, False, add_variable_fn)
-        gamma_reparametrized = tfp.util.DeferredTensor(gamma, lambda x: x + ratio_gamma)
-        prec_reparametrized = tfp.util.DeferredTensor(prec, lambda x: x + ratio_prec)
-        dist = NormalNatural(gamma=gamma_reparametrized, prec=prec_reparametrized)
-        batch_ndims = tf.size(input=dist.batch_shape_tensor())
-        return tfd.Independent(dist, reinterpreted_batch_ndims=batch_ndims)
-    return _fn
+    return natural_initializer
