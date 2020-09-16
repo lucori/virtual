@@ -12,19 +12,21 @@ from tensorflow.python.eager import context
 from tensorflow.python.ops import summary_ops_v2
 from tensorflow.python.framework import ops
 from tensorflow.python.keras import backend as K
-from natural_raparametrization_layer import DenseReparametrizationNaturalShared
+from natural_raparametrization_layer import DenseReparametrizationNaturalShared, \
+                                            DenseLocalReparametrizationNaturalShared
 from normal_natural import NormalNatural
 
-#gpu_session(1)
+gpu_session(1)
 
 data_set_conf = {"name": "femnist", "num_clients": 1}
 
-lr = 20.
+lr = 100.
 BATCH_SIZE = 20
 KL_WEIGHT = 0.000001
 scale_init = -5
 prec_init = 20000.
 seed = 0
+num_samples = 10
 
 tf.random.set_seed(seed)
 
@@ -37,8 +39,15 @@ train_size = train_size[0]
 train_data_batched = batch_dataset(train_data, BATCH_SIZE)
 test_data_batched = batch_dataset(test_data, BATCH_SIZE)
 
+#tf.debugging.enable_check_numerics(stack_height_limit=30, path_length_limit=50)
+
 
 class CustomTensorboard(tf.keras.callbacks.TensorBoard):
+
+    def __init__(self, *args, **kwargs):
+        optimizer = kwargs.pop('optimizer', None)
+        super(CustomTensorboard, self).__init__(*args, **kwargs)
+        self.optimizer = optimizer
 
     def _log_distr(self, epoch):
         """Logs the weights of the gaussian distributions to TensorBoard."""
@@ -61,9 +70,10 @@ class CustomTensorboard(tf.keras.callbacks.TensorBoard):
             self._log_weights(epoch)
             self._log_distr(epoch)
 
-
         if self.embeddings_freq and epoch % self.embeddings_freq == 0:
             self._log_embeddings(epoch)
+
+
 
 
 kernel_divergence_fn = (lambda q, p, ignore: KL_WEIGHT * kl_lib.kl_divergence(q, p) / train_size)
@@ -72,14 +82,15 @@ kernel_posterior_fn = renormalize_mean_field_normal_fn
 #    untransformed_scale_initializer=tf1.initializers.random_normal(
 #        mean=scale_init, stddev=0.1))
 
-#untransformed_scale_initializer = tf.random_normal_initializer(mean=scale_init, stddev=0.1)
+untransformed_scale_initializer = tf.random_normal_initializer(mean=scale_init, stddev=0.1)
 #layer = DenseReparametrizationShared
 #layer = tfp.layers.DenseReparameterization
-layer = DenseReparametrizationNaturalShared
+#layer = DenseReparametrizationNaturalShared
+layer = DenseLocalReparametrizationNaturalShared
 precision_initializer = tf.random_normal_initializer(mean=prec_init, stddev=1)
 
 
-param_dict = {#'untransformed_scale_initializer': untransformed_scale_initializer,
+param_dict = {'untransformed_scale_initializer': untransformed_scale_initializer,
               #'precision_initializer': precision_initializer,
               #'kernel_posterior_fn': kernel_posterior_fn,
               'kernel_divergence_fn': kernel_divergence_fn,
@@ -92,13 +103,32 @@ model = tf.keras.Sequential([layer(100, input_shape=[784], activation="relu", **
                              ])
 
 
-model.compile(optimizer=tf.keras.optimizers.Adam(lr),
+class MultiSampleEstimator(tf.keras.Model):
+
+    def __init__(self, model, num_samples):
+        super(MultiSampleEstimator, self).__init__()
+        self.model = model
+        self.num_samples = num_samples
+
+    def call(self, inputs, training=None, mask=None):
+        output = []
+        for _ in range(self.num_samples):
+            output.append(self.model.call(inputs, training, mask))
+        output = tf.stack(output)
+        output = tf.math.reduce_mean(output, axis=0)
+        return output
+
+#model = MultiSampleEstimator(model, num_samples=num_samples)
+optimizer = tf.keras.optimizers.Adam(lr)
+
+model.compile(optimizer=optimizer,
               loss=tf.keras.losses.sparse_categorical_crossentropy,
               metrics=['sparse_categorical_accuracy', tf.keras.metrics.SparseCategoricalAccuracy()],
-              #run_eagerly=True
+              run_eagerly=True
               )
 
 
 model.fit(train_data_batched, epochs=1000, validation_data=test_data_batched,
           callbacks=[CustomTensorboard(log_dir='logs/test/natural_shared_' + str(seed) + '_' + str(time.time()),
-                                       histogram_freq=1, profile_batch=0)])
+                                       histogram_freq=0, profile_batch=0)]
+          )

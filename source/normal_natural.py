@@ -10,6 +10,8 @@ from tensorflow_probability.python.internal import reparameterization
 from tensorflow_probability.python.internal import special_math
 from tensorflow_probability.python.internal import tensor_util
 
+eps = 1e-6
+
 
 class NormalNatural(tfd.Distribution):
 
@@ -89,6 +91,14 @@ class NormalNatural(tfd.Distribution):
     def _event_shape(self):
         return tf.TensorShape([])
 
+    @property
+    def loc(self):
+        return tf.math.multiply(self.gamma, tf.math.xdivy(1., self.prec + eps))
+
+    @property
+    def scale(self):
+        return tf.math.sqrt(tf.math.xdivy(1., self.prec + eps))
+
     def _sample_n(self, n, seed=None):
         gamma = tf.convert_to_tensor(self.gamma)
         prec = tf.convert_to_tensor(self.prec)
@@ -96,7 +106,9 @@ class NormalNatural(tfd.Distribution):
                           axis=0)
         sampled = tf.random.normal(
             shape=shape, mean=0., stddev=1., dtype=self.dtype, seed=seed)
-        return tf.math.divide(sampled, tf.math.sqrt(prec)) + tf.math.divide(gamma, prec)
+        inverse_prec = tf.math.xdivy(1., prec + eps)
+
+        return tf.math.multiply(sampled, tf.math.sqrt(inverse_prec)) + tf.math.multiply(gamma, inverse_prec)
 
     def _log_prob(self, x):
         prec = tf.convert_to_tensor(self.prec)
@@ -183,8 +195,11 @@ def _kl_normal_natural(a, b, name=None):
     with tf.name_scope(name or 'kl_normal_natural'):
         a_prec = tf.convert_to_tensor(a.prec)
         b_prec = tf.convert_to_tensor(b.prec)  # We'll read it thrice.
-        diff_log_prec = tf.math.log(a.prec) - tf.math.log(b_prec)
+        diff_log_prec = tf.math.log(a.prec + eps) - tf.math.log(b_prec + eps)
+        inverse_a_prec = tf.math.xdivy(1., a_prec + eps)
+        inverse_b_prec = tf.math.xdivy(1., a_prec + eps)
         return (
-                0.5 * tf.multiply(b_prec, tf.math.squared_difference(a.gamma / a_prec, b.gamma / b_prec)) +
-                0.5 * tf.math.expm1(- 2. * diff_log_prec) +
-                diff_log_prec)
+                0.5 * tf.multiply(b_prec, tf.math.squared_difference(tf.math.multiply(a.gamma, inverse_a_prec),
+                                                                     tf.math.multiply(b.gamma, inverse_b_prec))) +
+                0.5 * tf.math.expm1(- diff_log_prec) +
+                0.5 * diff_log_prec)

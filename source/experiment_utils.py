@@ -27,7 +27,9 @@ from source.dense_reparametrization_shared import RNNReparametrized
 from source.dense_reparametrization_shared import GaussianEmbedding
 from source.dense_reparametrization_shared import LSTMCellVariational
 from source.dense_reparametrization_shared import LSTMCellReparametrization
-from source.natural_raparametrization_layer import DenseReparametrizationNaturalShared
+from source.natural_raparametrization_layer import DenseReparametrizationNaturalShared, \
+                                                   DenseLocalReparametrizationNaturalShared,\
+                                                   DenseSharedNatural
 from source.tfp_utils import precision_from_untransformed_scale
 from source.constants import ROOT_LOGGER_STR
 from tensorflow_probability.python.layers import DenseReparameterization
@@ -67,7 +69,7 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                                         * kl_lib.kl_divergence(q, p) / k_w)
 
             if ('scale_init' in dict_conf
-                    and (issubclass(layer_class, DenseShared)
+                    and (issubclass(layer_class, DenseShared) or issubclass(layer_class, DenseSharedNatural)
                          or layer_class == Conv2DVirtual)):
                 scale_init = dict_conf['scale_init']
                 untransformed_scale = scale_init[0]
@@ -92,7 +94,7 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
 
             if layer_class == DenseReparameterization:
                 layer_params['kernel_divergence_fn'] = kernel_divergence_fn
-            if issubclass(layer_class, DenseShared):
+            if issubclass(layer_class, DenseShared) or issubclass(layer_class, DenseSharedNatural):
                 layer_params['kernel_divergence_fn'] = kernel_divergence_fn
                 layer_params['num_clients'] = dict_conf['num_clients']
                 layer_params['prior_scale'] = dict_conf['prior_scale']

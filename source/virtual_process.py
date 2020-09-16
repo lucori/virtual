@@ -73,9 +73,15 @@ class VirtualFedProcess(FedProcess):
                     epochs=epochs_per_round,
                     callbacks=callbacks)
                 self.clients[indx].s_i_to_update = True
-
+                [l.check_weights() for l in self.clients[indx].layers]
                 self.clients[indx].apply_damping(self.damping_factor)
                 delta = self.clients[indx].compute_delta()
+
+                #with self.train_summary_writer.as_default():
+                #    for dlt, layer in zip(delta, self.clients[indx].layers):
+                #        for key, value in dlt.items():
+                #            tf.summary.histogram(layer.name + '_' + str(indx), value, step=round_i)
+
                 deltas.append(delta)
 
                 history_train.append({key: history_single.history[key]
@@ -89,7 +95,8 @@ class VirtualFedProcess(FedProcess):
             # aggregated_deltas = self.aggregate_deltas_multi_layer(
             #     deltas, [train_size[client]/sum(train_size)
             #              for client in clients_sampled])
-            aggregated_deltas = self.aggregate_deltas_multi_layer(deltas)
+
+            aggregated_deltas = self.aggregate_deltas_multi_layer(deltas, [1. for _ in self.clients])
             self.server.apply_delta(aggregated_deltas)
             server_test = [self.server.evaluate(test_data, verbose=0)
                     for test_data in federated_test_data]
