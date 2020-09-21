@@ -286,11 +286,19 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
         else:
             lr_schedule = dict_conf['learning_rate']
 
-        if "momentum" in dict_conf:
+        if "momentum" in dict_conf:  # Case of SGD
             optimizer = tf.optimizers.get(
                 {'class_name': dict_conf['optimizer'],
                  'config': {'learning_rate': lr_schedule,
-                            'momentum': dict_conf['momentum']}})
+                            'momentum': dict_conf['momentum'],
+                            'nesterov': dict_conf.get('nesterov', False)}})
+        elif "beta" in dict_conf:  # Case of Adam
+            optimizer = tf.optimizers.get(
+                {'class_name': dict_conf['optimizer'],
+                 'config': {'learning_rate': lr_schedule,
+                            'beta_1': dict_conf['beta'][0],
+                            'beta_2': dict_conf['beta'][1],
+                            'amsgrad': dict_conf.get('amsgrad', False)}})
         else:
             optimizer = tf.optimizers.get(
                 {'class_name': dict_conf['optimizer'],
