@@ -4,13 +4,12 @@
     },
     "data_set_conf":{
         "name": "femnist",
-        "num_clients": 2
+        "num_clients": 10
     },
     "training_conf": {"method": "virtual",
-                     "tot_epochs_per_client": 1000,
+                     "tot_epochs_per_client": 2500,
                      "fed_avg_init": false,
-                     "tensorboard_updates": 1,
-                     "damping_factor": 0.5
+                     "tensorboard_updates": 1
     },
    "model_conf": {
               "layers": [{
@@ -35,12 +34,13 @@
               "prior_scale": 1.0
    },
    "hp": {"epochs_per_round": [1],
-         "learning_rate": [50.0],
-         "kl_weight": [0.000001],
-         "batch_size": [20],
-         "clients_per_round": [2],
-         "hierarchical": [false],
-         "optimizer": ["adam"],
-         "scale_init": [[-5, 0.1]]
+          "kl_weight": [0.000001, 0.0000001, 0.00000001],
+          "batch_size": [20],
+          "hierarchical": [false],
+          "clients_per_round": [10],
+          "learning_rate": [100000000, 50000000, 20000000, 10000000, 5000000, 2000000],
+          "optimizer": ["sgd"],
+          "scale_init": [[-5, 0.1]],
+          "damping_factor": [0.1, 0.2, 0.3, 0.4, 0.5]
    }
 }
