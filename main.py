@@ -208,18 +208,21 @@ def run_experiments(configs, root_path, data_dir=None, use_scratch=False):
     commit_id = Repo(Path().absolute()).head.commit
     logger.debug(f"Running code on git commit {commit_id}")
 
+    logger.debug(f"Loading dataset")
     fede_train_data, fed_test_data, train_size, test_size = federated_dataset(
         data_set_conf, data_dir)
+    logger.debug(f"Dataset loaded")
     num_clients = len(fede_train_data)
     model_conf['num_clients'] = num_clients
 
+    logger.debug(f"Making grid of hyperparameters")
     experiments = _gridsearch(hp_conf)
+    logger.debug(f"Grid done")
     for session_num, exp_conf in enumerate(experiments):
         all_params = {**data_set_conf,
                       **training_conf,
                       **model_conf,
                       **exp_conf}
-
         training_conf['num_rounds'] = \
             int(all_params['tot_epochs_per_client'] * all_params['num_clients']
                 / (all_params['clients_per_round']
@@ -240,6 +243,7 @@ def run_experiments(configs, root_path, data_dir=None, use_scratch=False):
             json.dump(configs, config_file, indent=4)
 
         # Prepare dataset
+        logger.debug(f'batching datasets')
         seq_length = data_set_conf.get('seq_length', None)
         federated_train_data_batched = [
             batch_dataset(data, all_params['batch_size'],
