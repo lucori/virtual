@@ -215,7 +215,7 @@ def run_experiments(configs, root_path, data_dir=None, use_scratch=False):
                       **exp_conf}
 
         training_conf['num_rounds'] = \
-            int(all_params['tot_epochs_per_client']
+            int(all_params['tot_epochs_per_client'] * all_params['num_clients']
                 / (all_params['clients_per_round']
                    * all_params['epochs_per_round']))
         all_params['num_rounds'] = training_conf['num_rounds']
