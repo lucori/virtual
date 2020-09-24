@@ -189,7 +189,8 @@ class DenseSharedNatural(VariationalReparametrizedNatural):
                                             self.kernel_prior_fn)
 
         natural_initializer = natural_initializer_fn(loc_stdev=0.1, u_scale_init_avg=-5, u_scale_init_stdev=0.1,
-                                                     untransformed_scale_initializer=self.untransformed_scale_initializer)
+                                                     untransformed_scale_initializer=self.untransformed_scale_initializer,
+                                                     num_clients=self.num_clients)
 
         self.kernel_posterior = self.kernel_posterior_fn(
                 dtype, [in_size, self.units], 'kernel_posterior',
@@ -245,7 +246,7 @@ class DenseLocalReparametrizationNaturalShared(DenseSharedNatural, tfp.layers.De
 
 
 def natural_initializer_fn(loc_stdev=0.1, u_scale_init_avg=-5, u_scale_init_stdev=0.1,
-                           untransformed_scale_initializer=None):
+                           untransformed_scale_initializer=None, num_clients=1.):
     loc_init = tf.random_normal_initializer(stddev=loc_stdev)
     if untransformed_scale_initializer is None:
         untransformed_scale_initializer = tf.random_normal_initializer(mean=u_scale_init_avg, stddev=u_scale_init_stdev)
@@ -253,7 +254,7 @@ def natural_initializer_fn(loc_stdev=0.1, u_scale_init_avg=-5, u_scale_init_stde
     def natural_initializer(shape, dtype=tf.float32):
         prec = precision_from_untransformed_scale(untransformed_scale_initializer(shape[:-1], dtype))
         gamma = loc_init(shape[:-1], dtype) * prec
-        natural = tf.stack([gamma, prec], axis=-1)
+        natural = tf.stack([gamma, prec], axis=-1) / num_clients
         tf.debugging.check_numerics(natural, 'initializer')
         return natural
 
