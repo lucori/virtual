@@ -148,6 +148,9 @@ def submit_jobs(configs, root_path, data_dir, hour=12, mem=8000,
     config_dir = root_path / f'temp_configs_{current_time}'
     config_dir.mkdir(exist_ok=True)
 
+    lsf_out_dir = root_path/ 'outs'
+    lsf_out_dir.mkdir(exist_ok=True)
+
     hp_conf = configs['hp']
     experiments = _gridsearch(hp_conf)
     new_config = configs.copy()
@@ -156,11 +159,13 @@ def submit_jobs(configs, root_path, data_dir, hour=12, mem=8000,
             for key, value in exp_conf.items():
                 new_config['hp'][key] = [value]
 
+            name = f"{configs['config_name']}_" \
+                   f"g{current_time}_" \
+                   f"{session_num}_" \
+                   f"{rep}"
+
             # Save the new config file
-            config_path = config_dir / f"{configs['config_name']}_" \
-                                       f"g{current_time}_" \
-                                       f"{session_num}_" \
-                                       f"{rep}.json"
+            config_path = config_dir / f"{name}.json"
             with config_path.open(mode='w') as config_file:
                 json.dump(new_config, config_file)
 
@@ -168,6 +173,7 @@ def submit_jobs(configs, root_path, data_dir, hour=12, mem=8000,
             command = (f"bsub -n 2 -W {hour}:00 "
                        f"-R rusage[mem={mem},scratch=80000,"
                        f"ngpus_excl_p=1] "
+                       f"-o {lsf_out_dir / name} "
                        f"python main.py --result_dir {root_path} "
                        f"--data_dir {data_dir} "
                        f"{'--scratch ' if use_scratch else ''}"
