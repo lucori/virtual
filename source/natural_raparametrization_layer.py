@@ -36,9 +36,9 @@ class VariationalReparametrizedNatural(LayerCentered):
         self.client_center_variable_dict[name] = client_par
         return posterior_fn, prior_fn
 
-    def initialize_kernel_posterior(self):
+    def initialize_kernel_posterior(self, num_clients):
         for key in self.client_variable_dict.keys():
-            self.client_variable_dict[key].assign(self.server_variable_dict[key])
+            self.client_variable_dict[key].assign(self.server_variable_dict[key]/num_clients)
 
     def apply_damping(self, damping_factor):
         for key in self.server_variable_dict.keys():
@@ -92,7 +92,7 @@ class VariationalReparametrizedNatural(LayerCentered):
         return _fn
 
     def natural_tensor_multivariate_normal_fn(self, ratio_par, num_clients, prior_scale=1.):
-        def _fn(dtype, shape, name, trainable, add_variable_fn, initializer=natural_prior_initializer_fn(),
+        def _fn(dtype, shape, name, trainable, add_variable_fn, initializer=natural_prior_initializer_fn(num_clients),
                 regularizer=None, constraint=None, **kwargs):
             del trainable
             natural_par_fn = self.tensor_natural_par_fn(natural_initializer=initializer,
@@ -260,9 +260,9 @@ def natural_initializer_fn(loc_stdev=0.1, u_scale_init_avg=-5, u_scale_init_stde
     return natural_initializer
 
 
-def natural_prior_initializer_fn():
+def natural_prior_initializer_fn(num_clients=1.):
     gamma_init = tf.constant_initializer(0.)
-    precision_init = tf.constant_initializer(1.)
+    precision_init = tf.constant_initializer(1./num_clients)
 
     def natural_initializer(shape, dtype):
         prec = precision_init(shape[:-1], dtype)
