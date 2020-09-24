@@ -53,18 +53,27 @@ class VirtualFedProcess(FedProcess):
         history_test = [None] * len(self.clients)
         max_accuracy = -1.0
         max_acc_round = None
+        updated_clients = [False] * len(self.clients)
+
+        deltas = []
+        for client in self.clients:
+            deltas.append(client.compute_delta())
+
+        aggregated_deltas = self.aggregate_deltas_multi_layer(deltas, [1. for _ in self.clients])
+        self.server.apply_delta(aggregated_deltas)
+
         for round_i in range(num_rounds):
             clients_sampled = random.sample(self.clients_indx,
                                             clients_per_round)
             deltas = []
             history_train = []
             for indx in clients_sampled:
-                if round_i > 0:
-                    self.clients[indx].receive_and_save_weights(self.server)
-                    if self.clients[indx].s_i_to_update:
-                        self.clients[indx].renew_center()
-                    if self.fed_avg_init:
-                        self.clients[indx].initialize_kernel_posterior()
+                self.clients[indx].receive_and_save_weights(self.server)
+                #if self.clients[indx].s_i_to_update:
+                self.clients[indx].s_i_to_update = True
+                self.clients[indx].renew_center()
+                if self.fed_avg_init:
+                   self.clients[indx].initialize_kernel_posterior(sum(updated_clients))
 
                 history_single = self.clients[indx].fit(
                     federated_train_data[indx],
@@ -72,15 +81,32 @@ class VirtualFedProcess(FedProcess):
                     validation_data=federated_test_data[indx],
                     epochs=epochs_per_round,
                     callbacks=callbacks)
-                self.clients[indx].s_i_to_update = True
-                [l.check_weights() for l in self.clients[indx].layers]
+
+                #if updated_clients[indx]:
                 self.clients[indx].apply_damping(self.damping_factor)
+
+                updated_clients[indx] = True
+                self.clients[indx].s_i_to_update = True
+
                 delta = self.clients[indx].compute_delta()
 
-                #with self.train_summary_writer.as_default():
-                #    for dlt, layer in zip(delta, self.clients[indx].layers):
-                #        for key, value in dlt.items():
-                #            tf.summary.histogram(layer.name + '_' + str(indx), value, step=round_i)
+                with self.train_summary_writer.as_default():
+                    for layer in self.clients[indx].layers:
+                        for weight in layer.trainable_weights:
+                            tf.summary.histogram(layer.name + '/gamma',
+                                                 weight[..., 0], step=round_i)
+                            tf.summary.histogram(layer.name + '/prec',
+                                                 weight[..., 1], step=round_i)
+                        tf.summary.histogram(layer.name + '/gamma_reparametrized',
+                                             layer.kernel_posterior.distribution.gamma, step=round_i)
+                        tf.summary.histogram(layer.name + '/prec_reparametrized',
+                                             layer.kernel_posterior.distribution.prec, step=round_i)
+                    for layer in self.server.layers:
+                        for key, value in layer.server_variable_dict.items():
+                            tf.summary.histogram(layer.name + '/server_gamma',
+                                                 value[..., 0], step=round_i)
+                            tf.summary.histogram(layer.name + '/server_prec',
+                                                 value[..., 1], step=round_i)
 
                 deltas.append(delta)
 
@@ -98,6 +124,7 @@ class VirtualFedProcess(FedProcess):
 
             aggregated_deltas = self.aggregate_deltas_multi_layer(deltas, [1. for _ in self.clients])
             self.server.apply_delta(aggregated_deltas)
+
             server_test = [self.server.evaluate(test_data, verbose=0)
                     for test_data in federated_test_data]
             avg_train = avg_dict(history_train,
