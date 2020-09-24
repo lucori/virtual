@@ -194,14 +194,16 @@ class DenseShared(VariationalReparametrized):
             self.kernel_posterior.distribution.loc.pretransformed_input,
             self.kernel_posterior.distribution.scale.pretransformed_input.pretransformed_input))
 
-        self.bias_center = self.add_weight('bias_center',
-                                           shape=[self.units, ],
-                                           initializer=tf.keras.initializers.constant(0.),
-                                           dtype=self.dtype,
-                                           trainable=False)
-        self.client_variable_dict['bias'] = self.bias_posterior.distribution.loc
-        self.server_variable_dict['bias'] = self.bias_posterior.distribution.loc
-        self.client_center_variable_dict['bias'] = self.bias_center
+        if self.bias_posterior:
+            self.bias_center = self.add_weight('bias_center',
+                                               shape=[self.units, ],
+                                               initializer=tf.keras.initializers.constant(0.),
+                                               dtype=self.dtype,
+                                               trainable=False)
+            self.client_variable_dict['bias'] = self.bias_posterior.distribution.loc
+            self.server_variable_dict['bias'] = self.bias_posterior.distribution.loc
+            self.client_center_variable_dict['bias'] = self.bias_center
+
         self.built = True
 
 
