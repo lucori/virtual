@@ -2,12 +2,14 @@ import tensorflow as tf
 import tensorflow_probability as tfp
 from tensorflow_probability.python import distributions as tfd
 from tensorflow_probability.python.layers import util as tfp_layers_util
+from tensorflow.python.layers import utils as tf_layers_util
 from source.centered_layers import LayerCentered
 from source.tfp_utils import precision_from_untransformed_scale
 from source.normal_natural import NormalNatural, eps
 from tensorflow.python.keras.constraints import Constraint
 from tensorflow.python.keras import backend as K
 from tensorflow.python.ops import math_ops
+from tensorflow.python.ops import nn_ops
 
 
 class NonNegPrec(Constraint):
@@ -23,9 +25,10 @@ def tensor_natural_par_fn(is_singular=False, natural_initializer=tf.constant_ini
                           **kwargs):
     def _fn(dtype, shape, name, trainable, add_variable_fn):
         """Creates 'natural' parameters."""
+        print(list(shape))
         natural = add_variable_fn(
             name=name + '_natural',
-            shape=shape + [2],
+            shape=list(shape) + [2],
             initializer=natural_initializer,
             regularizer=natural_regularizer,
             constraint=natural_constraint,
@@ -40,7 +43,7 @@ def tensor_natural_par_fn(is_singular=False, natural_initializer=tf.constant_ini
 class VariationalReparametrizedNatural(LayerCentered):
 
     def build_posterior_fn_natural(self, shape, dtype, name, posterior_fn, prior_fn):
-        natural_par_shape = shape + [2]
+        natural_par_shape = list(shape) + [2]
         server_par = self.add_variable(name=name+'_server_par', shape=natural_par_shape, dtype=dtype, trainable=False,
                                        initializer=tf.keras.initializers.zeros)
         client_par = self.add_variable(name=name+'_client_par', shape=natural_par_shape, dtype=dtype, trainable=False,
@@ -182,9 +185,11 @@ class DenseSharedNatural(VariationalReparametrizedNatural):
                                             self.kernel_posterior_fn,
                                             self.kernel_prior_fn)
 
-        natural_initializer = natural_initializer_fn(loc_stdev=0.1, u_scale_init_avg=-5, u_scale_init_stdev=0.1,
-                                                     untransformed_scale_initializer=self.untransformed_scale_initializer,
-                                                     num_clients=self.num_clients)
+        natural_initializer = natural_initializer_fn(
+            loc_stdev=0.1, u_scale_init_avg=-5,
+            u_scale_init_stdev=0.1,
+            untransformed_scale_initializer=self.untransformed_scale_initializer,
+            num_clients=self.num_clients)
 
         self.kernel_posterior = self.kernel_posterior_fn(
                 dtype, [in_size, self.units], 'kernel_posterior',
@@ -306,3 +311,290 @@ def natural_prior_initializer_fn(num_clients=1.):
         return natural
 
     return natural_initializer
+
+
+class Conv2DVirtualNatural(tfp.layers.Convolution2DReparameterization,
+                    VariationalReparametrizedNatural):
+
+    def __init__(
+            self,
+            filters,
+            kernel_size,
+            strides=1,
+            padding='valid',
+            data_format='channels_last',
+            dilation_rate=1,
+            activation=None,
+            activity_regularizer=None,
+            kernel_posterior_fn=None,
+            kernel_posterior_tensor_fn=(lambda d: d.sample()),
+            kernel_prior_fn=None,
+            kernel_divergence_fn=lambda q, p, ignore: tfd.kl_divergence(q, p),
+            bias_posterior_fn=
+            tfp_layers_util.default_mean_field_normal_fn(is_singular=True),
+            bias_posterior_tensor_fn=lambda d: d.sample(),
+            bias_prior_fn=None,
+            bias_divergence_fn=lambda q, p, ignore: tfd.kl_divergence(q, p),
+            num_clients=1,
+            prior_scale=1.,
+            **kwargs):
+
+        self.untransformed_scale_initializer = None
+        if 'untransformed_scale_initializer' in kwargs:
+            self.untransformed_scale_initializer = \
+                kwargs.pop('untransformed_scale_initializer')
+
+        if kernel_posterior_fn is None:
+            kernel_posterior_fn = self.renormalize_natural_mean_field_normal_fn
+        if kernel_prior_fn is None:
+            kernel_prior_fn = self.natural_tensor_multivariate_normal_fn
+
+        super(Conv2DVirtualNatural, self).__init__(
+            filters=filters,
+            kernel_size=kernel_size,
+            strides=strides,
+            padding=padding,
+            data_format=data_format,
+            dilation_rate=dilation_rate,
+            activation=tf.keras.activations.get(activation),
+            activity_regularizer=activity_regularizer,
+            kernel_posterior_fn=kernel_posterior_fn,
+            kernel_posterior_tensor_fn=kernel_posterior_tensor_fn,
+            kernel_prior_fn=kernel_prior_fn,
+            kernel_divergence_fn=kernel_divergence_fn,
+            bias_posterior_fn=bias_posterior_fn,
+            bias_posterior_tensor_fn=bias_posterior_tensor_fn,
+            bias_prior_fn=bias_prior_fn,
+            bias_divergence_fn=bias_divergence_fn,
+            **kwargs)
+
+        self.num_clients = num_clients
+        self.prior_scale = prior_scale
+        self.delta_function = tf.subtract
+        self.apply_delta_function = tf.add
+        self.client_variable_dict = {}
+        self.client_center_variable_dict = {}
+        self.server_variable_dict = {}
+
+    def build(self, input_shape):
+        input_shape = tf.TensorShape(input_shape)
+        if self.data_format == 'channels_first':
+            channel_axis = 1
+        else:
+            channel_axis = -1
+        input_dim = tf.compat.dimension_value(input_shape[channel_axis])
+        if input_dim is None:
+            raise ValueError('The channel dimension of the inputs '
+                             'should be defined. Found `None`.')
+        kernel_shape = self.kernel_size + (input_dim, self.filters)
+
+        # If self.dtype is None, build weights using the default dtype.
+        dtype = tf.as_dtype(self.dtype or tf.keras.backend.floatx())
+        name = 'kernel'
+
+        self.kernel_posterior_fn, self.kernel_prior_fn = \
+            self.build_posterior_fn_natural(kernel_shape, dtype, name,
+                                            self.kernel_posterior_fn,
+                                            self.kernel_prior_fn)
+
+        natural_initializer = natural_initializer_fn(
+            loc_stdev=0.1,
+            u_scale_init_avg=-5,
+            u_scale_init_stdev=0.1,
+            untransformed_scale_initializer=self.untransformed_scale_initializer,
+            num_clients=self.num_clients)
+
+        self.kernel_posterior = self.kernel_posterior_fn(
+            dtype, kernel_shape, 'kernel_posterior',
+            self.trainable, self.add_variable,
+            natural_initializer=natural_initializer)
+
+        if self.kernel_prior_fn is None:
+            self.kernel_prior = None
+        else:
+            self.kernel_prior = self.kernel_prior_fn(
+                dtype, kernel_shape, 'kernel_prior',
+                self.trainable, self.add_variable)
+        self._built_kernel_divergence = False
+
+        if self.bias_posterior_fn is None:
+            self.bias_posterior = None
+        else:
+            self.bias_posterior = self.bias_posterior_fn(
+                dtype, (self.filters,), 'bias_posterior',
+                self.trainable, self.add_variable)
+
+        if self.bias_prior_fn is None:
+            self.bias_prior = None
+        else:
+            self.bias_prior = self.bias_prior_fn(
+                dtype, (self.filters,), 'bias_prior',
+                self.trainable, self.add_variable)
+        self._built_bias_divergence = False
+
+        self.input_spec = tf.keras.layers.InputSpec(
+            ndim=self.rank + 2, axes={channel_axis: input_dim})
+        self._convolution_op = nn_ops.Convolution(
+            input_shape,
+            filter_shape=tf.TensorShape(kernel_shape),
+            dilation_rate=self.dilation_rate,
+            strides=self.strides,
+            padding=self.padding.upper(),
+            data_format=tf_layers_util.convert_data_format(
+                self.data_format, self.rank + 2))
+
+        if self.bias_posterior:
+            self.bias_center = self.add_weight('bias_center',
+                                               shape=[self.units, ],
+                                               initializer=tf.keras.initializers.constant(0.),
+                                               dtype=self.dtype,
+                                               trainable=False)
+            self.client_variable_dict['bias'] = self.bias_posterior.distribution.loc
+            self.server_variable_dict['bias'] = self.bias_posterior.distribution.loc
+            self.client_center_variable_dict['bias'] = self.bias_center
+
+        self.built = True
+
+
+class Conv1DVirtualNatural(tfp.layers.Convolution1DReparameterization,
+                           VariationalReparametrizedNatural):
+
+    def __init__(
+            self,
+            filters,
+            kernel_size,
+            strides=1,
+            padding='valid',
+            data_format='channels_last',
+            dilation_rate=1,
+            activation=None,
+            activity_regularizer=None,
+            kernel_posterior_fn=None,
+            kernel_posterior_tensor_fn=(lambda d: d.sample()),
+            kernel_prior_fn=None,
+            kernel_divergence_fn=lambda q, p, ignore: tfd.kl_divergence(q, p),
+            bias_posterior_fn=
+            tfp_layers_util.default_mean_field_normal_fn(is_singular=True),
+            bias_posterior_tensor_fn=lambda d: d.sample(),
+            bias_prior_fn=None,
+            bias_divergence_fn=lambda q, p, ignore: tfd.kl_divergence(q, p),
+            num_clients=1,
+            prior_scale=1.,
+            **kwargs):
+
+        self.untransformed_scale_initializer = None
+        if 'untransformed_scale_initializer' in kwargs:
+            self.untransformed_scale_initializer = \
+                kwargs.pop('untransformed_scale_initializer')
+
+        if kernel_posterior_fn is None:
+            kernel_posterior_fn = self.renormalize_natural_mean_field_normal_fn
+        if kernel_prior_fn is None:
+            kernel_prior_fn = self.natural_tensor_multivariate_normal_fn
+
+        super(Conv1DVirtualNatural, self).__init__(
+            filters=filters,
+            kernel_size=kernel_size,
+            strides=strides,
+            padding=padding,
+            data_format=data_format,
+            dilation_rate=dilation_rate,
+            activation=tf.keras.activations.get(activation),
+            activity_regularizer=activity_regularizer,
+            kernel_posterior_fn=kernel_posterior_fn,
+            kernel_posterior_tensor_fn=kernel_posterior_tensor_fn,
+            kernel_prior_fn=kernel_prior_fn,
+            kernel_divergence_fn=kernel_divergence_fn,
+            bias_posterior_fn=bias_posterior_fn,
+            bias_posterior_tensor_fn=bias_posterior_tensor_fn,
+            bias_prior_fn=bias_prior_fn,
+            bias_divergence_fn=bias_divergence_fn,
+            **kwargs)
+
+        self.num_clients = num_clients
+        self.prior_scale = prior_scale
+        self.delta_function = tf.subtract
+        self.apply_delta_function = tf.add
+        self.client_variable_dict = {}
+        self.client_center_variable_dict = {}
+        self.server_variable_dict = {}
+
+    def build(self, input_shape):
+        input_shape = tf.TensorShape(input_shape)
+        if self.data_format == 'channels_first':
+            channel_axis = 1
+        else:
+            channel_axis = -1
+        input_dim = tf.compat.dimension_value(input_shape[channel_axis])
+        if input_dim is None:
+            raise ValueError('The channel dimension of the inputs '
+                             'should be defined. Found `None`.')
+        kernel_shape = self.kernel_size + (input_dim, self.filters)
+
+        # If self.dtype is None, build weights using the default dtype.
+        dtype = tf.as_dtype(self.dtype or tf.keras.backend.floatx())
+        name = 'kernel'
+
+        self.kernel_posterior_fn, self.kernel_prior_fn = \
+            self.build_posterior_fn_natural(kernel_shape, dtype, name,
+                                            self.kernel_posterior_fn,
+                                            self.kernel_prior_fn)
+
+        natural_initializer = natural_initializer_fn(
+            loc_stdev=0.1,
+            u_scale_init_avg=-5,
+            u_scale_init_stdev=0.1,
+            untransformed_scale_initializer=self.untransformed_scale_initializer,
+            num_clients=self.num_clients)
+
+        # Must have a posterior kernel.
+        self.kernel_posterior = self.kernel_posterior_fn(
+            dtype, kernel_shape, 'kernel_posterior',
+            self.trainable, self.add_variable,
+            natural_initializer=natural_initializer)
+
+        if self.kernel_prior_fn is None:
+            self.kernel_prior = None
+        else:
+            self.kernel_prior = self.kernel_prior_fn(
+                dtype, kernel_shape, 'kernel_prior',
+                self.trainable, self.add_variable)
+        self._built_kernel_divergence = False
+
+        if self.bias_posterior_fn is None:
+            self.bias_posterior = None
+        else:
+            self.bias_posterior = self.bias_posterior_fn(
+                dtype, (self.filters,), 'bias_posterior',
+                self.trainable, self.add_variable)
+
+        if self.bias_prior_fn is None:
+            self.bias_prior = None
+        else:
+            self.bias_prior = self.bias_prior_fn(
+                dtype, (self.filters,), 'bias_prior',
+                self.trainable, self.add_variable)
+        self._built_bias_divergence = False
+
+        self.input_spec = tf.keras.layers.InputSpec(
+            ndim=self.rank + 2, axes={channel_axis: input_dim})
+        self._convolution_op = nn_ops.Convolution(
+            input_shape,
+            filter_shape=tf.TensorShape(kernel_shape),
+            dilation_rate=self.dilation_rate,
+            strides=self.strides,
+            padding=self.padding.upper(),
+            data_format=tf_layers_util.convert_data_format(
+                self.data_format, self.rank + 2))
+
+        if self.bias_posterior:
+            self.bias_center = self.add_weight('bias_center',
+                                               shape=[self.units, ],
+                                               initializer=tf.keras.initializers.constant(0.),
+                                               dtype=self.dtype,
+                                               trainable=False)
+            self.client_variable_dict['bias'] = self.bias_posterior.distribution.loc
+            self.server_variable_dict['bias'] = self.bias_posterior.distribution.loc
+            self.client_center_variable_dict['bias'] = self.bias_center
+
+        self.built = True

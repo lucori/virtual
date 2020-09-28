@@ -19,6 +19,8 @@ from source.centered_layers import (DenseCentered, CenteredL2Regularizer,
                                     RNNCentered, Conv2DCentered)
 from source.dense_reparametrization_shared import Conv1DVirtual
 from source.dense_reparametrization_shared import Conv2DVirtual
+from source.natural_raparametrization_layer import Conv1DVirtualNatural
+from source.natural_raparametrization_layer import Conv2DVirtualNatural
 from source.dense_reparametrization_shared import DenseShared
 from source.dense_reparametrization_shared import DenseLocalReparametrizationShared
 from source.dense_reparametrization_shared import DenseReparametrizationShared
@@ -72,8 +74,10 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                                         * kl_lib.kl_divergence(q, p) / k_w)
 
             if ('scale_init' in dict_conf
-                    and (issubclass(layer_class, DenseShared) or issubclass(layer_class, DenseSharedNatural)
-                         or layer_class == Conv2DVirtual)):
+                    and (issubclass(layer_class, DenseShared)
+                         or issubclass(layer_class, DenseSharedNatural)
+                         or layer_class == Conv2DVirtual
+                         or layer_class == Conv2DVirtualNatural)):
                 scale_init = dict_conf['scale_init']
                 untransformed_scale = scale_init[0]
                 if scale_init[0] == 'auto':
@@ -97,11 +101,13 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
 
             if layer_class == DenseReparameterization:
                 layer_params['kernel_divergence_fn'] = kernel_divergence_fn
-            if issubclass(layer_class, DenseShared) or issubclass(layer_class, DenseSharedNatural):
+            if (issubclass(layer_class, DenseShared)
+                    or issubclass(layer_class, DenseSharedNatural)):
                 layer_params['kernel_divergence_fn'] = kernel_divergence_fn
                 layer_params['num_clients'] = dict_conf['num_clients']
                 layer_params['prior_scale'] = dict_conf['prior_scale']
-            if layer_class == Conv2DVirtual:
+            if (layer_class == Conv2DVirtual
+                    or layer_class == Conv2DVirtualNatural):
                 layer_params['kernel_divergence_fn'] = kernel_divergence_fn
                 layer_params['num_clients'] = dict_conf['num_clients']
                 layer_params['prior_scale'] = dict_conf['prior_scale']
@@ -194,8 +200,10 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                                                / k_w)
 
             if ('scale_init' in dict_conf
-                    and (issubclass(layer_class, DenseShared) or issubclass(layer_class, DenseSharedNatural)
-                         or layer_class == Conv2DVirtual)):
+                    and (issubclass(layer_class, DenseShared)
+                         or issubclass(layer_class, DenseSharedNatural)
+                         or layer_class == Conv2DVirtual
+                         or layer_class == Conv2DVirtualNatural)):
                 scale_init = dict_conf['scale_init']
                 untransformed_scale = scale_init[0]
                 if scale_init[0] == 'auto':
@@ -207,7 +215,8 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                                                  stddev=scale_init[1])
 
             # TODO: Maybe try non-linear activation
-            if issubclass(layer_class, DenseShared) or issubclass(layer_class, DenseSharedNatural):
+            if issubclass(layer_class, DenseShared) \
+                    or issubclass(layer_class, DenseSharedNatural):
                 server_params = dict(layer_params)
                 server_params['kernel_divergence_fn'] = server_divergence_fn
                 server_params['num_clients'] = dict_conf['num_clients']
@@ -217,8 +226,8 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                 client_params['kernel_divergence_fn'] = client_divergence_fn
                 client_params['activation'] = 'linear'
                 if issubclass(layer_class, DenseSharedNatural):
-                    natural_initializer = natural_initializer_fn(untransformed_scale_initializer=
-                                                                 layer_params['untransformed_scale_initializer'])
+                    natural_initializer = natural_initializer_fn(
+                        untransformed_scale_initializer=layer_params['untransformed_scale_initializer'])
                     client_params['kernel_posterior_fn'] = client_posterior_fn(natural_initializer)
                     client_params['kernel_prior_fn'] = client_prior_fn()
 
@@ -232,8 +241,16 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                     activation=layer_params['activation'])(
                     tf.keras.layers.Add()([Gate()(server_path), client_path]))
 
-            elif issubclass(layer_class, Conv2DVirtual):
+            elif (issubclass(layer_class, Conv2DVirtual)
+                  or issubclass(layer_class, Conv2DVirtualNatural)):
                 client_params = dict(layer_params)
+
+                if issubclass(layer_class, Conv2DVirtualNatural):
+                    natural_initializer = natural_initializer_fn(
+                        untransformed_scale_initializer=layer_params['untransformed_scale_initializer'])
+                    client_params['kernel_posterior_fn'] = client_posterior_fn(natural_initializer)
+                    client_params['kernel_prior_fn'] = client_prior_fn()
+
                 client_params['kernel_divergence_fn'] = client_divergence_fn
                 client_params['activation'] = 'linear'
                 client_params.pop('untransformed_scale_initializer', None)
