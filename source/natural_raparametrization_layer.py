@@ -3,7 +3,7 @@ import tensorflow_probability as tfp
 from tensorflow_probability.python import distributions as tfd
 from tensorflow_probability.python.layers import util as tfp_layers_util
 from source.centered_layers import LayerCentered
-from source.tfp_utils import precision_from_untransformed_scale, precision_from_scale
+from source.tfp_utils import precision_from_untransformed_scale
 from source.normal_natural import NormalNatural, eps
 from tensorflow.python.keras.constraints import Constraint
 from tensorflow.python.keras import backend as K
@@ -16,6 +16,25 @@ class NonNegPrec(Constraint):
         prec = w[..., -1]
         prec = prec * math_ops.cast(math_ops.greater_equal(prec, eps), K.floatx())
         return tf.stack([w[..., 0], prec], axis=-1)
+
+
+def tensor_natural_par_fn(is_singular=False, natural_initializer=tf.constant_initializer(0.),
+                          natural_regularizer=None, natural_constraint=None,
+                          **kwargs):
+    def _fn(dtype, shape, name, trainable, add_variable_fn):
+        """Creates 'natural' parameters."""
+        natural = add_variable_fn(
+            name=name + '_natural',
+            shape=shape + [2],
+            initializer=natural_initializer,
+            regularizer=natural_regularizer,
+            constraint=natural_constraint,
+            dtype=dtype,
+            trainable=trainable,
+            **kwargs)
+        return natural
+
+    return _fn
 
 
 class VariationalReparametrizedNatural(LayerCentered):
@@ -54,40 +73,19 @@ class VariationalReparametrizedNatural(LayerCentered):
                 natural_initializer=None,
                 natural_regularizer=None, natural_constraint=NonNegPrec(),
                 **kwargs):
-            natural_par_fn = self.tensor_natural_par_fn(natural_initializer=natural_initializer,
-                                                        natural_regularizer=natural_regularizer,
-                                                        natural_constraint=natural_constraint,
-                                                        **kwargs)
+            natural_par_fn = tensor_natural_par_fn(natural_initializer=natural_initializer,
+                                                   natural_regularizer=natural_regularizer,
+                                                   natural_constraint=natural_constraint,
+                                                   **kwargs)
             natural = natural_par_fn(dtype, shape, name, trainable, add_variable_fn)
             self.client_variable_dict['kernel'] = natural
             natural_reparametrized = tfp.util.DeferredTensor(natural, lambda x: tf.add(x, ratio_par))
             gamma = tfp.util.DeferredTensor(natural_reparametrized, lambda x: x[..., 0], shape=shape)
             prec = tfp.util.DeferredTensor(natural_reparametrized, lambda x: x[..., 1], shape=shape)
 
-            #scale = tfp.util.DeferredTensor(prec, precision_from_scale.inverse)
-            #loc = tfp.util.DeferredTensor(gamma, lambda x: tf.math.xdivy(x, prec))
             dist = NormalNatural(gamma=gamma, prec=prec)
-            #dist = tfd.Normal(loc=loc, scale=scale)
             batch_ndims = tf.size(dist.batch_shape_tensor())
             return tfd.Independent(dist, reinterpreted_batch_ndims=batch_ndims)
-
-        return _fn
-
-    def tensor_natural_par_fn(self, is_singular=False, natural_initializer=tf.constant_initializer(0.),
-                              natural_regularizer=None, natural_constraint=None,
-                              **kwargs):
-        def _fn(dtype, shape, name, trainable, add_variable_fn):
-            """Creates 'natural' parameters."""
-            natural = add_variable_fn(
-                name=name + '_natural',
-                shape=shape + [2],
-                initializer=natural_initializer,
-                regularizer=natural_regularizer,
-                constraint=natural_constraint,
-                dtype=dtype,
-                trainable=trainable,
-                **kwargs)
-            return natural
 
         return _fn
 
@@ -95,20 +93,16 @@ class VariationalReparametrizedNatural(LayerCentered):
         def _fn(dtype, shape, name, trainable, add_variable_fn, initializer=natural_prior_initializer_fn(num_clients),
                 regularizer=None, constraint=None, **kwargs):
             del trainable
-            natural_par_fn = self.tensor_natural_par_fn(natural_initializer=initializer,
-                                                        natural_regularizer=regularizer,
-                                                        natural_constraint=constraint,
-                                                        **kwargs)
+            natural_par_fn = tensor_natural_par_fn(natural_initializer=initializer,
+                                                   natural_regularizer=regularizer,
+                                                   natural_constraint=constraint,
+                                                   **kwargs)
             natural = natural_par_fn(dtype, shape, name, False, add_variable_fn)
             natural_reparametrized = tfp.util.DeferredTensor(natural, lambda x: x + ratio_par)
             gamma = tfp.util.DeferredTensor(natural_reparametrized, lambda x: x[..., 0], shape=shape)
             prec = tfp.util.DeferredTensor(natural_reparametrized, lambda x: x[..., 1], shape=shape)
-            #TODO: we should use the num_clients to scale the prior
 
-            #scale = tfp.util.DeferredTensor(prec, precision_from_scale.inverse)
-            #loc = tfp.util.DeferredTensor(gamma, lambda x: tf.math.xdivy(x, prec))
             dist = NormalNatural(gamma=gamma, prec=prec)
-            #dist = tfd.Normal(loc=loc, scale=scale)
             batch_ndims = tf.size(input=dist.batch_shape_tensor())
             return tfd.Independent(dist, reinterpreted_batch_ndims=batch_ndims)
 
@@ -243,6 +237,46 @@ class DenseLocalReparametrizationNaturalShared(DenseSharedNatural, tfp.layers.De
             self.kernel_posterior_tensor_fn(self.kernel_posterior_affine))
         self.kernel_posterior_tensor = None
         return self.kernel_posterior_affine_tensor
+
+
+def natural_mean_field_normal_fn(natural_initializer=None):
+
+    def _fn(dtype, shape, name, trainable, add_variable_fn,
+            natural_initializer=natural_initializer,
+            natural_regularizer=None, natural_constraint=NonNegPrec(),
+            **kwargs):
+        natural_par_fn = tensor_natural_par_fn(natural_initializer=natural_initializer,
+                                               natural_regularizer=natural_regularizer,
+                                               natural_constraint=natural_constraint,
+                                               **kwargs)
+        natural = natural_par_fn(dtype, shape, name, trainable, add_variable_fn)
+        gamma = tfp.util.DeferredTensor(natural, lambda x: x[..., 0], shape=shape)
+        prec = tfp.util.DeferredTensor(natural, lambda x: x[..., 1], shape=shape)
+
+        dist = NormalNatural(gamma=gamma, prec=prec)
+        batch_ndims = tf.size(dist.batch_shape_tensor())
+        return tfd.Independent(dist, reinterpreted_batch_ndims=batch_ndims)
+
+    return _fn
+
+
+def natural_tensor_multivariate_normal_fn():
+    def _fn(dtype, shape, name, trainable, add_variable_fn, initializer=natural_prior_initializer_fn(),
+            regularizer=None, constraint=None, **kwargs):
+        del trainable
+        natural_par_fn = tensor_natural_par_fn(natural_initializer=initializer,
+                                               natural_regularizer=regularizer,
+                                               natural_constraint=constraint,
+                                               **kwargs)
+        natural = natural_par_fn(dtype, shape, name, False, add_variable_fn)
+        gamma = tfp.util.DeferredTensor(natural, lambda x: x[..., 0], shape=shape)
+        prec = tfp.util.DeferredTensor(natural, lambda x: x[..., 1], shape=shape)
+
+        dist = NormalNatural(gamma=gamma, prec=prec)
+        batch_ndims = tf.size(input=dist.batch_shape_tensor())
+        return tfd.Independent(dist, reinterpreted_batch_ndims=batch_ndims)
+
+    return _fn
 
 
 def natural_initializer_fn(loc_stdev=0.1, u_scale_init_avg=-5, u_scale_init_stdev=0.1,

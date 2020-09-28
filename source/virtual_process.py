@@ -69,8 +69,6 @@ class VirtualFedProcess(FedProcess):
             history_train = []
             for indx in clients_sampled:
                 self.clients[indx].receive_and_save_weights(self.server)
-                #if self.clients[indx].s_i_to_update:
-                self.clients[indx].s_i_to_update = True
                 self.clients[indx].renew_center()
                 if self.fed_avg_init:
                    self.clients[indx].initialize_kernel_posterior(sum(updated_clients))
@@ -82,7 +80,6 @@ class VirtualFedProcess(FedProcess):
                     epochs=epochs_per_round,
                     callbacks=callbacks)
 
-                #if updated_clients[indx]:
                 self.clients[indx].apply_damping(self.damping_factor)
 
                 updated_clients[indx] = True
@@ -93,20 +90,25 @@ class VirtualFedProcess(FedProcess):
                 with self.train_summary_writer.as_default():
                     for layer in self.clients[indx].layers:
                         for weight in layer.trainable_weights:
-                            tf.summary.histogram(layer.name + '/gamma',
-                                                 weight[..., 0], step=round_i)
-                            tf.summary.histogram(layer.name + '/prec',
-                                                 weight[..., 1], step=round_i)
-                        tf.summary.histogram(layer.name + '/gamma_reparametrized',
-                                             layer.kernel_posterior.distribution.gamma, step=round_i)
-                        tf.summary.histogram(layer.name + '/prec_reparametrized',
-                                             layer.kernel_posterior.distribution.prec, step=round_i)
+                            if 'natural' in weight.name:
+                                tf.summary.histogram(layer.name + '/gamma',
+                                                     weight[..., 0], step=round_i)
+                                tf.summary.histogram(layer.name + '/prec',
+                                                     weight[..., 1], step=round_i)
+                            else:
+                                tf.summary.histogram(layer.name, weight, step=round_i)
+                        if hasattr(layer, 'kernel_posterior'):
+                            tf.summary.histogram(layer.name + '/gamma_reparametrized',
+                                                 layer.kernel_posterior.distribution.gamma, step=round_i)
+                            tf.summary.histogram(layer.name + '/prec_reparametrized',
+                                                 layer.kernel_posterior.distribution.prec, step=round_i)
                     for layer in self.server.layers:
-                        for key, value in layer.server_variable_dict.items():
-                            tf.summary.histogram(layer.name + '/server_gamma',
-                                                 value[..., 0], step=round_i)
-                            tf.summary.histogram(layer.name + '/server_prec',
-                                                 value[..., 1], step=round_i)
+                        if hasattr(layer, 'server_variable_dict'):
+                            for key, value in layer.server_variable_dict.items():
+                                tf.summary.histogram(layer.name + '/server_gamma',
+                                                     value[..., 0], step=round_i)
+                                tf.summary.histogram(layer.name + '/server_prec',
+                                                     value[..., 1], step=round_i)
 
                 deltas.append(delta)
 

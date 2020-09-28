@@ -32,12 +32,9 @@ class _Server:
 class _ClientVirtual(_Client):
 
     def renew_center(self):
-        if self.s_i_to_update:
-            for layer in self.layers:
-                if hasattr(layer, 'renew_center'):
-                    layer.renew_center()
-        else:
-            self.s_i_to_update = True
+        for layer in self.layers:
+            if hasattr(layer, 'renew_center'):
+                layer.renew_center()
 
     def apply_damping(self, damping_factor):
         for layer in self.layers:
