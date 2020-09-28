@@ -18,6 +18,7 @@ h5py==2.10.0
 idna==2.8
 ipython-genutils==0.2.0
 joblib==0.14.1
+keras==2.4.3
 keras-applications==1.0.8
 keras-preprocessing==1.1.0
 kiwisolver==1.1.0
@@ -44,7 +45,7 @@ scikit-learn==0.22.1
 scipy==1.4.1
 setuptools==45.0.0
 tensorboard==2.1.0
-tensorflow==2.1.0
+tensorflow~=2.0.0
 tensorflow-federated==0.12.0
 tensorflow-probability==0.9.0
 termcolor==1.1.0
@@ -54,3 +55,5 @@ wheel==0.33.6
 wrapt==1.11.2
 tqdm==4.43.0
 gitpython
+tensorflow-gpu~=2.0.0
+keras~=2.4.3
