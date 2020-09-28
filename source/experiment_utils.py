@@ -29,7 +29,10 @@ from source.dense_reparametrization_shared import LSTMCellVariational
 from source.dense_reparametrization_shared import LSTMCellReparametrization
 from source.natural_raparametrization_layer import DenseReparametrizationNaturalShared, \
                                                    DenseLocalReparametrizationNaturalShared,\
-                                                   DenseSharedNatural
+                                                   DenseSharedNatural, \
+                                                   natural_mean_field_normal_fn, \
+                                                   natural_tensor_multivariate_normal_fn, \
+                                                   natural_initializer_fn
 from source.tfp_utils import precision_from_untransformed_scale
 from source.constants import ROOT_LOGGER_STR
 from tensorflow_probability.python.layers import DenseReparameterization
@@ -170,12 +173,17 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
             k_w = float(train_size)
             if issubclass(model_class, _Server):
                 k_w = 1
+
             server_divergence_fn = (lambda q, p, ignore:
                                     dict_conf['kl_weight']
                                     * kl_lib.kl_divergence(q, p) / k_w)
             client_divergence_fn = (lambda q, p, ignore:
                                     dict_conf['kl_weight']
                                     * kl_lib.kl_divergence(q, p) / k_w)
+
+            client_posterior_fn = natural_mean_field_normal_fn
+            client_prior_fn = natural_tensor_multivariate_normal_fn
+
             client_reccurrent_divergence_fn = (lambda q, p, ignore:
                                                dict_conf['kl_weight']
                                                * kl_lib.kl_divergence(q, p)
@@ -186,7 +194,7 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                                                / k_w)
 
             if ('scale_init' in dict_conf
-                    and (issubclass(layer_class, DenseShared)
+                    and (issubclass(layer_class, DenseShared) or issubclass(layer_class, DenseSharedNatural)
                          or layer_class == Conv2DVirtual)):
                 scale_init = dict_conf['scale_init']
                 untransformed_scale = scale_init[0]
@@ -199,7 +207,7 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                                                  stddev=scale_init[1])
 
             # TODO: Maybe try non-linear activation
-            if issubclass(layer_class, DenseShared):
+            if issubclass(layer_class, DenseShared) or issubclass(layer_class, DenseSharedNatural):
                 server_params = dict(layer_params)
                 server_params['kernel_divergence_fn'] = server_divergence_fn
                 server_params['num_clients'] = dict_conf['num_clients']
@@ -208,10 +216,17 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                 client_params = dict(layer_params)
                 client_params['kernel_divergence_fn'] = client_divergence_fn
                 client_params['activation'] = 'linear'
-                client_params.pop('untransformed_scale_initializer', None)
+                if issubclass(layer_class, DenseSharedNatural):
+                    natural_initializer = natural_initializer_fn(untransformed_scale_initializer=
+                                                                 layer_params['untransformed_scale_initializer'])
+                    client_params['kernel_posterior_fn'] = client_posterior_fn(natural_initializer)
+                    client_params['kernel_prior_fn'] = client_prior_fn()
 
+                client_params.pop('untransformed_scale_initializer', None)
+                print('client par:', client_params)
                 client_path = tfp.layers.DenseReparameterization(
                     **client_params)(client_path)
+                print('server par:', server_params, 'layer_class', layer_class)
                 server_path = layer_class(**server_params)(server_path)
                 client_path = tf.keras.layers.Activation(
                     activation=layer_params['activation'])(
@@ -268,7 +283,7 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
         return model_class(inputs=in_layer, outputs=client_path)
 
     def compile_model(model):
-
+        model.summary()
         def loss_fn(y_true, y_pred):
             return tf.keras.losses.sparse_categorical_crossentropy(y_true, y_pred) + sum(model.losses)
 

@@ -22,7 +22,8 @@ class Gate(tf.keras.layers.Layer):
             shape=input_shape[1:],
             initializer=self.initializer,
             dtype=self.dtype,
-            trainable=True)
+            trainable=True,
+            constraint=tf.keras.constraints.NonNeg())
         self.built = True
 
     def call(self, inputs):
