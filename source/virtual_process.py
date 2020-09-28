@@ -3,6 +3,7 @@ import logging
 from pathlib import Path
 
 import tensorflow as tf
+import numpy as np
 
 from source.federated_devices import (ClientVirtualSequential,
                                       ClientVirtualModel,
@@ -59,9 +60,16 @@ class VirtualFedProcess(FedProcess):
         for client in self.clients:
             deltas.append(client.compute_delta())
 
-        aggregated_deltas = self.aggregate_deltas_multi_layer(deltas, [1. for _ in self.clients])
+        aggregated_deltas = self.aggregate_deltas_multi_layer(
+            deltas, [1. for _ in self.clients])
         self.server.apply_delta(aggregated_deltas)
 
+        server_test_accs = np.zeros(num_rounds)
+        client_test_accs = np.zeros(num_rounds)
+        training_accs = np.zeros(num_rounds)
+        server_test_losses = np.zeros(num_rounds)
+        client_test_losses = np.zeros(num_rounds)
+        training_losses = np.zeros(num_rounds)
         for round_i in range(num_rounds):
             clients_sampled = random.sample(self.clients_indx,
                                             clients_per_round)
@@ -86,31 +94,39 @@ class VirtualFedProcess(FedProcess):
                 self.clients[indx].s_i_to_update = True
 
                 delta = self.clients[indx].compute_delta()
+                deltas.append(delta)
 
                 with self.train_summary_writer.as_default():
                     for layer in self.clients[indx].layers:
                         for weight in layer.trainable_weights:
                             if 'natural' in weight.name:
-                                tf.summary.histogram(layer.name + '/gamma',
-                                                     weight[..., 0], step=round_i)
-                                tf.summary.histogram(layer.name + '/prec',
-                                                     weight[..., 1], step=round_i)
+                                tf.summary.histogram(
+                                    layer.name + '/gamma',
+                                    weight[..., 0], step=round_i)
+                                tf.summary.histogram(
+                                    layer.name + '/prec',
+                                    weight[..., 1], step=round_i)
                             else:
-                                tf.summary.histogram(layer.name, weight, step=round_i)
+                                tf.summary.histogram(
+                                    layer.name, weight, step=round_i)
                         if hasattr(layer, 'kernel_posterior'):
-                            tf.summary.histogram(layer.name + '/gamma_reparametrized',
-                                                 layer.kernel_posterior.distribution.gamma, step=round_i)
-                            tf.summary.histogram(layer.name + '/prec_reparametrized',
-                                                 layer.kernel_posterior.distribution.prec, step=round_i)
+                            tf.summary.histogram(
+                                layer.name + '/gamma_reparametrized',
+                                layer.kernel_posterior.distribution.gamma,
+                                step=round_i)
+                            tf.summary.histogram(
+                                layer.name + '/prec_reparametrized',
+                                layer.kernel_posterior.distribution.prec,
+                                step=round_i)
                     for layer in self.server.layers:
                         if hasattr(layer, 'server_variable_dict'):
                             for key, value in layer.server_variable_dict.items():
-                                tf.summary.histogram(layer.name + '/server_gamma',
-                                                     value[..., 0], step=round_i)
-                                tf.summary.histogram(layer.name + '/server_prec',
-                                                     value[..., 1], step=round_i)
-
-                deltas.append(delta)
+                                tf.summary.histogram(
+                                    layer.name + '/server_gamma',
+                                    value[..., 0], step=round_i)
+                                tf.summary.histogram(
+                                    layer.name + '/server_prec',
+                                    value[..., 1], step=round_i)
 
                 history_train.append({key: history_single.history[key]
                                       for key in history_single.history.keys()
@@ -124,26 +140,28 @@ class VirtualFedProcess(FedProcess):
             #     deltas, [train_size[client]/sum(train_size)
             #              for client in clients_sampled])
 
-            aggregated_deltas = self.aggregate_deltas_multi_layer(deltas, [1. for _ in self.clients])
+            aggregated_deltas = self.aggregate_deltas_multi_layer(
+                deltas, [1. for _ in self.clients])
             self.server.apply_delta(aggregated_deltas)
 
             server_test = [self.server.evaluate(test_data, verbose=0)
-                    for test_data in federated_test_data]
+                           for test_data in federated_test_data]
             avg_train = avg_dict(history_train,
                                  [train_size[client]
                                   for client in clients_sampled])
             avg_test = avg_dict(history_test, test_size)
-            server_avg_test = avg_dict_eval(server_test, [size / sum(test_size)
-                                                  for size in test_size])
+            server_avg_test = avg_dict_eval(
+                server_test, [size / sum(test_size) for size in test_size])
 
-            if server_avg_test[1] > max_accuracy:  # Suppose 1st index is the test acc
+            if server_avg_test[1] > max_accuracy:
                 max_accuracy = server_avg_test[1]
                 max_acc_round = round_i
-
-            # if avg_test['sparse_categorical_accuracy'] > max_accuracy:
-            #     max_accuracy = avg_test['sparse_categorical_accuracy']
-            #     max_acc_round = round_i
-
+            server_test_accs[round_i] = server_avg_test[1]
+            client_test_accs[round_i] = avg_test['sparse_categorical_accuracy']
+            training_accs[round_i] = avg_train['sparse_categorical_accuracy']
+            server_test_losses[round_i] = server_avg_test[0]
+            client_test_losses[round_i] = avg_test['loss']
+            training_losses[round_i] = avg_train['loss']
             logger.debug(f"round: {round_i}, "
                          f"avg_train: {avg_train}, "
                          f"avg_test: {avg_test}, "
@@ -151,25 +169,26 @@ class VirtualFedProcess(FedProcess):
                          f"clients avg test: {avg_test}, "
                          f"max accuracy so far: {max_accuracy} reached at "
                          f"round {max_acc_round}")
-
             if round_i % tensorboard_updates == 0:
                 for i, key in enumerate(avg_train.keys()):
                     with self.train_summary_writer.as_default():
                         tf.summary.scalar(key, avg_train[key], step=round_i)
-                    #with self.test_summary_writer.as_default():
-                    #    tf.summary.scalar(key, server_avg_test[i], step=round_i)
                     with self.test_summary_writer.as_default():
                         tf.summary.scalar(key, server_avg_test[i], step=round_i)
                     with self.valid_summary_writer.as_default():
                         tf.summary.scalar(key, avg_test[key], step=round_i)
-                # with self.test_summary_writer.as_default():
-                #     for key in total_avg_test.keys():
-                #         tf.summary.scalar(key, total_avg_test[key], step=round_i)
-                #     tf.summary.scalar('max_sparse_categorical_accuracy',
-                #                       max_accuracy, step=round_i)
                 with self.test_summary_writer.as_default():
                     tf.summary.scalar('max_sparse_categorical_accuracy',
                                       max_accuracy, step=round_i)
+
+            # Do this at every round to make sure to keep the data even if
+            # the training is interrupted
+            np.save(logdir.parent / 'server_accs.npy', server_test_accs)
+            np.save(logdir.parent / 'client_accs.npy', client_test_accs)
+            np.save(logdir.parent / 'training_accs.npy', training_accs)
+            np.save(logdir.parent / 'server_losses.npy', server_test_losses)
+            np.save(logdir.parent / 'client_losses.npy', client_test_losses)
+            np.save(logdir.parent / 'training_losses.npy', training_losses)
 
         for i, client in enumerate(self.clients):
             client.save_weights(str(logdir / f'weights_{i}.h5'))
