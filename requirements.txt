@@ -18,7 +18,7 @@ h5py==2.10.0
 idna==2.8
 ipython-genutils==0.2.0
 joblib==0.14.1
-keras==2.4.3
+keras==2.1
 keras-applications==1.0.8
 keras-preprocessing==1.1.0
 kiwisolver==1.1.0
