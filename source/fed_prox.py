@@ -3,6 +3,7 @@ import logging
 from pathlib import Path
 
 import tensorflow as tf
+import numpy as np
 
 from source.federated_devices import ClientSequential, ServerSequential
 from source.fed_process import FedProcess
@@ -42,6 +43,12 @@ class FedProx(FedProcess):
         history_test = [None] * len(self.clients)
         max_accuracy = -1.0
         max_acc_round = None
+        server_test_accs = np.zeros(num_rounds)
+        client_test_accs = np.zeros(num_rounds)
+        training_accs = np.zeros(num_rounds)
+        server_test_losses = np.zeros(num_rounds)
+        client_test_losses = np.zeros(num_rounds)
+        training_losses = np.zeros(num_rounds)
         for round_i in range(num_rounds):
             clients_sampled = random.sample(self.clients_indx,
                                             clients_per_round)
@@ -83,13 +90,9 @@ class FedProx(FedProcess):
             server_avg_test = avg_dict_eval(test, [size/sum(test_size)
                                                    for size in test_size])
 
-            if server_avg_test[1] > max_accuracy:  # Suppose 1st index is the test acc
+            if server_avg_test[1] > max_accuracy:
                 max_accuracy = server_avg_test[1]
                 max_acc_round = round_i
-
-            # if avg_test['sparse_categorical_accuracy'] > max_accuracy:
-            #     max_accuracy = avg_test['sparse_categorical_accuracy']
-            #     max_acc_round = round_i
 
             logger.info(f"round: {round_i}, "
                         f"avg_train: {avg_train}, "
@@ -97,6 +100,13 @@ class FedProx(FedProcess):
                         f"server avgtest: {server_avg_test} "
                         f"max accuracy so far: {max_accuracy} reached at "
                         f"round {max_acc_round}")
+
+            server_test_accs[round_i] = server_avg_test[1]
+            client_test_accs[round_i] = avg_test['sparse_categorical_accuracy']
+            training_accs[round_i] = avg_train['sparse_categorical_accuracy']
+            server_test_losses[round_i] = server_avg_test[0]
+            client_test_losses[round_i] = avg_test['loss']
+            training_losses[round_i] = avg_train['loss']
             if round_i % tensorboard_updates == 0:
                 for i, key in enumerate(avg_train.keys()):
                     with self.train_summary_writer.as_default():
@@ -109,3 +119,12 @@ class FedProx(FedProcess):
                 with self.test_summary_writer.as_default():
                     tf.summary.scalar('max_sparse_categorical_accuracy',
                                       max_accuracy, step=round_i)
+
+            # Do this at every round to make sure to keep the data even if
+            # the training is interrupted
+            np.save(logdir.parent / 'server_accs.npy', server_test_accs)
+            np.save(logdir.parent / 'client_accs.npy', client_test_accs)
+            np.save(logdir.parent / 'training_accs.npy', training_accs)
+            np.save(logdir.parent / 'server_losses.npy', server_test_losses)
+            np.save(logdir.parent / 'client_losses.npy', client_test_losses)
+            np.save(logdir.parent / 'training_losses.npy', training_losses)
