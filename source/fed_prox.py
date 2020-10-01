@@ -9,7 +9,7 @@ from source.federated_devices import ClientSequential, ServerSequential
 from source.fed_process import FedProcess
 from source.utils import avg_dict, avg_dict_eval
 from source.constants import ROOT_LOGGER_STR
-
+from operator import itemgetter
 
 logger = logging.getLogger(ROOT_LOGGER_STR + '.' + __name__)
 
@@ -68,6 +68,13 @@ class FedProx(FedProcess):
                 delta = self.clients[indx].compute_delta()
                 deltas.append(delta)
 
+                with self.train_summary_writer.as_default():
+                    for l, layer in enumerate(self.clients[indx].layers):
+                        for weight in layer.trainable_weights:
+                            tf.summary.histogram(layer.name, weight, step=round_i)
+                        for key, value in delta[l].items():
+                            tf.summary.histogram(layer.name + '/' + key, value, step=round_i)
+
                 history_train.append({key: history_single.history[key]
                                       for key in history_single.history.keys()
                                       if 'val' not in key})
@@ -78,8 +85,9 @@ class FedProx(FedProcess):
                      if 'val' in key}
 
             aggregated_deltas = self.aggregate_deltas_multi_layer(
-                deltas, [train_size[client]/sum(train_size)
-                         for client in clients_sampled])
+                deltas,
+                [train_size[client] / sum(itemgetter(*clients_sampled)(train_size)) for client in clients_sampled]
+                )
             self.server.apply_delta(aggregated_deltas)
             test = [self.server.evaluate(test_data, verbose=0)
                     for test_data in federated_test_data]
