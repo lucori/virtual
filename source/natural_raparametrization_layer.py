@@ -46,7 +46,7 @@ class VariationalReparametrizedNatural(LayerCentered):
         client_par = self.add_variable(name=name+'_client_par', shape=natural_par_shape, dtype=dtype, trainable=False,
                                        initializer=tf.keras.initializers.zeros)
 
-        ratio_par = tfp.util.DeferredTensor(server_par, lambda x: x - client_par)
+        ratio_par = tfp.util.DeferredTensor(server_par, lambda x: x - client_par / self.num_clients)
 
         posterior_fn = posterior_fn(ratio_par)
         prior_fn = prior_fn(ratio_par, self.num_clients, self.prior_scale)
@@ -79,7 +79,7 @@ class VariationalReparametrizedNatural(LayerCentered):
                                                    **kwargs)
             natural = natural_par_fn(dtype, shape, name, trainable, add_variable_fn)
             self.client_variable_dict['kernel'] = natural
-            natural_reparametrized = tfp.util.DeferredTensor(natural, lambda x: tf.add(x, ratio_par))
+            natural_reparametrized = tfp.util.DeferredTensor(natural, lambda x: tf.add(x / self.num_clients, ratio_par))
             gamma = tfp.util.DeferredTensor(natural_reparametrized, lambda x: x[..., 0], shape=shape)
             prec = tfp.util.DeferredTensor(natural_reparametrized, lambda x: x[..., 1], shape=shape)
 
