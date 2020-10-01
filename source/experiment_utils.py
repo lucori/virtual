@@ -36,7 +36,8 @@ from source.natural_raparametrization_layer import DenseReparametrizationNatural
 from source.tfp_utils import precision_from_untransformed_scale
 from source.constants import ROOT_LOGGER_STR
 from tensorflow_probability.python.layers import DenseReparameterization
-
+from source.learning_rate_multipliers_opt import LR_SGD
+from tensorflow.keras.layers import Dense
 
 logger = logging.getLogger(ROOT_LOGGER_STR + '.' + __name__)
 
@@ -59,6 +60,9 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
 
             def kernel_reg_fn():
                 return CenteredL2Regularizer(dict_conf['l2_reg'])
+
+            if not train_size:
+                train_size = 1.
 
             k_w = float(train_size)
             if issubclass(model_class, _Server):
@@ -216,6 +220,7 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                 client_params = dict(layer_params)
                 client_params['kernel_divergence_fn'] = client_divergence_fn
                 client_params['activation'] = 'linear'
+                server_params['activation'] = 'linear'
                 if issubclass(layer_class, DenseSharedNatural):
                     natural_initializer = natural_initializer_fn(untransformed_scale_initializer=
                                                                  layer_params['untransformed_scale_initializer'])
@@ -230,7 +235,8 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                 server_path = layer_class(**server_params)(server_path)
                 client_path = tf.keras.layers.Activation(
                     activation=layer_params['activation'])(
-                    tf.keras.layers.Add()([Gate()(server_path), client_path]))
+                    tf.keras.layers.Add()([(server_path), Gate()(client_path)]))
+                #TODO: the server model has to be only the server tower (or just put the gate initialized at zero)
 
             elif issubclass(layer_class, Conv2DVirtual):
                 client_params = dict(layer_params)
@@ -319,6 +325,16 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                 {'class_name': dict_conf['optimizer'],
                  'config': {'learning_rate': lr_schedule}})
 
+        #TODO: adjust properly
+        LR_mult_dict = {}
+        for layer in model.layers:
+            if 'gate' in layer.name:
+                LR_mult_dict[layer.name] = 1e-10
+            else:
+                LR_mult_dict[layer.name] = 1.
+
+        optimizer = LR_SGD(lr=lr_schedule, multipliers=LR_mult_dict)
+
         model.compile(optimizer=optimizer,
                       loss=loss_fn,
                       metrics=[metric],
@@ -356,8 +372,8 @@ def run_simulation(model_fn, federated_train_data, federated_test_data,
         gc.collect()
     elif cfgs['method'] == 'fedavg':
         train_log_dir = logdir / 'train'
-        train_summary_writer = tf.summary.create_file_writer(train_log_dir)
-        test_summary_writer = tf.summary.create_file_writer(logdir)
+        train_summary_writer = tf.summary.create_file_writer(str(train_log_dir))
+        test_summary_writer = tf.summary.create_file_writer(str(logdir))
 
         tff.framework.set_default_executor(tff.framework.create_local_executor())
         iterative_process = tff.learning.build_federated_averaging_process(model_fn)
