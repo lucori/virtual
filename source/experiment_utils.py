@@ -46,7 +46,7 @@ dir_path = os.path.dirname(os.path.realpath(__file__))
 
 
 def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
-    def create_seq_model(model_class=tf.keras.Sequential, train_size=None):
+    def create_seq_model(model_class=tf.keras.Sequential, train_size=None, client_weight=None):
         # Make sure layer parameters are a list
         if not isinstance(dict_conf['layers'], list):
             dict_conf['layers'] = [dict_conf['layers']]
@@ -101,10 +101,13 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
 
             if layer_class == DenseReparameterization:
                 layer_params['kernel_divergence_fn'] = kernel_divergence_fn
-            if issubclass(layer_class, DenseShared) or issubclass(layer_class, DenseSharedNatural):
+            if issubclass(layer_class, DenseShared):
                 layer_params['kernel_divergence_fn'] = kernel_divergence_fn
                 layer_params['num_clients'] = dict_conf['num_clients']
                 layer_params['prior_scale'] = dict_conf['prior_scale']
+            if issubclass(layer_class, DenseSharedNatural):
+                layer_params['kernel_divergence_fn'] = kernel_divergence_fn
+                layer_params['client_weight'] = client_weight
             if layer_class == Conv2DVirtual:
                 layer_params['kernel_divergence_fn'] = kernel_divergence_fn
                 layer_params['num_clients'] = dict_conf['num_clients']
@@ -156,7 +159,7 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
             layers.append(layer_class(**layer_params))
         return model_class(layers)
 
-    def create_model_hierarchical(model_class=tf.keras.Model, train_size=None):
+    def create_model_hierarchical(model_class=tf.keras.Model, train_size=None, client_weight=None):
         if 'architecture' in dict_conf and dict_conf['architecture'] == 'rnn':
             b_shape = (dict_conf['batch_size'], dict_conf['seq_length'])
             in_layer = tf.keras.layers.Input(batch_input_shape=b_shape)
@@ -214,9 +217,11 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
             if issubclass(layer_class, DenseShared) or issubclass(layer_class, DenseSharedNatural):
                 server_params = dict(layer_params)
                 server_params['kernel_divergence_fn'] = server_divergence_fn
-                server_params['num_clients'] = dict_conf['num_clients']
-                server_params['prior_scale'] = dict_conf['prior_scale']
-
+                if issubclass(layer_class, DenseShared):
+                    server_params['num_clients'] = dict_conf['num_clients']
+                    server_params['prior_scale'] = dict_conf['prior_scale']
+                if issubclass(layer_class, DenseSharedNatural):
+                    server_params['client_weight'] = client_weight
                 client_params = dict(layer_params)
                 client_params['kernel_divergence_fn'] = client_divergence_fn
                 client_params['activation'] = 'linear'
@@ -236,7 +241,6 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                 client_path = tf.keras.layers.Activation(
                     activation=layer_params['activation'])(
                     tf.keras.layers.Add()([(server_path), Gate()(client_path)]))
-                #TODO: the server model has to be only the server tower (or just put the gate initialized at zero)
 
             elif issubclass(layer_class, Conv2DVirtual):
                 client_params = dict(layer_params)
@@ -341,12 +345,12 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                       experimental_run_tf_function=False)
         return model
 
-    def model_fn(model_class=tf.keras.Sequential, train_size=None):
+    def model_fn(model_class=tf.keras.Sequential, train_size=None, client_weight=None):
         create = create_seq_model
         if 'hierarchical' in dict_conf and dict_conf['hierarchical']:
             create = create_model_hierarchical
 
-        model = compile_model(create(model_class, train_size))
+        model = compile_model(create(model_class, train_size, client_weight))
         if dict_conf['method'] == 'fedavg':
             return tff.learning.from_compiled_keras_model(model, sample_batch)
         return model
