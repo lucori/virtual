@@ -46,25 +46,25 @@ class VariationalReparametrizedNatural(LayerCentered):
         client_par = self.add_variable(name=name+'_client_par', shape=natural_par_shape, dtype=dtype, trainable=False,
                                        initializer=tf.keras.initializers.zeros)
 
-        ratio_par = tfp.util.DeferredTensor(server_par, lambda x: x - client_par / self.num_clients)
+        ratio_par = tfp.util.DeferredTensor(server_par, lambda x: x - self.client_weight * client_par)
 
         posterior_fn = posterior_fn(ratio_par)
-        prior_fn = prior_fn(ratio_par, self.num_clients, self.prior_scale)
+        prior_fn = prior_fn(ratio_par)
 
         self.server_variable_dict[name] = server_par
         self.client_center_variable_dict[name] = client_par
         return posterior_fn, prior_fn
 
-    def initialize_kernel_posterior(self, num_clients):
+    def initialize_kernel_posterior(self):
         for key in self.client_variable_dict.keys():
-            self.client_variable_dict[key].assign(self.server_variable_dict[key]/num_clients)
+            self.client_variable_dict[key].assign(self.server_variable_dict[key])
 
     def apply_damping(self, damping_factor):
         for key in self.server_variable_dict.keys():
             tf.debugging.check_numerics(self.client_variable_dict[key], 'client')
             tf.debugging.check_numerics(self.client_center_variable_dict[key], 'center')
             damped = self.apply_delta_function(self.client_variable_dict[key] * damping_factor,
-                                               self.client_center_variable_dict[key] * (1-damping_factor))
+                                               self.client_center_variable_dict[key] * (1 - damping_factor))
             self.client_variable_dict[key].assign(damped)
 
     def renormalize_natural_mean_field_normal_fn(self, ratio_par):
@@ -79,7 +79,7 @@ class VariationalReparametrizedNatural(LayerCentered):
                                                    **kwargs)
             natural = natural_par_fn(dtype, shape, name, trainable, add_variable_fn)
             self.client_variable_dict['kernel'] = natural
-            natural_reparametrized = tfp.util.DeferredTensor(natural, lambda x: tf.add(x / self.num_clients, ratio_par))
+            natural_reparametrized = tfp.util.DeferredTensor(natural, lambda x: x * self.client_weight + ratio_par)
             gamma = tfp.util.DeferredTensor(natural_reparametrized, lambda x: x[..., 0], shape=shape)
             prec = tfp.util.DeferredTensor(natural_reparametrized, lambda x: x[..., 1], shape=shape)
 
@@ -89,8 +89,8 @@ class VariationalReparametrizedNatural(LayerCentered):
 
         return _fn
 
-    def natural_tensor_multivariate_normal_fn(self, ratio_par, num_clients, prior_scale=1.):
-        def _fn(dtype, shape, name, trainable, add_variable_fn, initializer=natural_prior_initializer_fn(num_clients),
+    def natural_tensor_multivariate_normal_fn(self, ratio_par):
+        def _fn(dtype, shape, name, trainable, add_variable_fn, initializer=natural_prior_initializer_fn(),
                 regularizer=None, constraint=None, **kwargs):
             del trainable
             natural_par_fn = tensor_natural_par_fn(natural_initializer=initializer,
@@ -98,7 +98,7 @@ class VariationalReparametrizedNatural(LayerCentered):
                                                    natural_constraint=constraint,
                                                    **kwargs)
             natural = natural_par_fn(dtype, shape, name, False, add_variable_fn)
-            natural_reparametrized = tfp.util.DeferredTensor(natural, lambda x: x + ratio_par)
+            natural_reparametrized = tfp.util.DeferredTensor(natural, lambda x: x * self.client_weight + ratio_par)
             gamma = tfp.util.DeferredTensor(natural_reparametrized, lambda x: x[..., 0], shape=shape)
             prec = tfp.util.DeferredTensor(natural_reparametrized, lambda x: x[..., 1], shape=shape)
 
@@ -118,8 +118,7 @@ class DenseSharedNatural(VariationalReparametrizedNatural):
     def __init__(self, units,
                  activation=None,
                  activity_regularizer=None,
-                 num_clients=1,
-                 prior_scale=1.,
+                 client_weight=1.,
                  trainable=True,
                  kernel_posterior_fn=None,
                  kernel_posterior_tensor_fn=(lambda d: d.sample()),
@@ -157,8 +156,7 @@ class DenseSharedNatural(VariationalReparametrizedNatural):
                      bias_divergence_fn=bias_divergence_fn,
                      **kwargs)
 
-        self.num_clients = num_clients
-        self.prior_scale = prior_scale
+        self.client_weight = client_weight
         self.delta_function = tf.subtract
         self.apply_delta_function = tf.add
         self.client_variable_dict = {}
@@ -183,8 +181,7 @@ class DenseSharedNatural(VariationalReparametrizedNatural):
                                             self.kernel_prior_fn)
 
         natural_initializer = natural_initializer_fn(loc_stdev=0.1, u_scale_init_avg=-5, u_scale_init_stdev=0.1,
-                                                     untransformed_scale_initializer=self.untransformed_scale_initializer,
-                                                     num_clients=self.num_clients)
+                                                     untransformed_scale_initializer=self.untransformed_scale_initializer)
 
         self.kernel_posterior = self.kernel_posterior_fn(
                 dtype, [in_size, self.units], 'kernel_posterior',
@@ -280,7 +277,7 @@ def natural_tensor_multivariate_normal_fn():
 
 
 def natural_initializer_fn(loc_stdev=0.1, u_scale_init_avg=-5, u_scale_init_stdev=0.1,
-                           untransformed_scale_initializer=None, num_clients=1.):
+                           untransformed_scale_initializer=None):
     loc_init = tf.random_normal_initializer(stddev=loc_stdev)
     if untransformed_scale_initializer is None:
         untransformed_scale_initializer = tf.random_normal_initializer(mean=u_scale_init_avg, stddev=u_scale_init_stdev)
@@ -288,16 +285,16 @@ def natural_initializer_fn(loc_stdev=0.1, u_scale_init_avg=-5, u_scale_init_stde
     def natural_initializer(shape, dtype=tf.float32):
         prec = precision_from_untransformed_scale(untransformed_scale_initializer(shape[:-1], dtype))
         gamma = loc_init(shape[:-1], dtype) * prec
-        natural = tf.stack([gamma, prec], axis=-1) / num_clients
+        natural = tf.stack([gamma, prec], axis=-1)
         tf.debugging.check_numerics(natural, 'initializer')
         return natural
 
     return natural_initializer
 
 
-def natural_prior_initializer_fn(num_clients=1.):
+def natural_prior_initializer_fn():
     gamma_init = tf.constant_initializer(0.)
-    precision_init = tf.constant_initializer(1./num_clients)
+    precision_init = tf.constant_initializer(1.)
 
     def natural_initializer(shape, dtype):
         prec = precision_init(shape[:-1], dtype)
