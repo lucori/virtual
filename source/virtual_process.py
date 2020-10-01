@@ -12,6 +12,7 @@ from source.federated_devices import (ClientVirtualSequential,
 from source.fed_process import FedProcess
 from source.utils import avg_dict, avg_dict_eval
 from source.constants import ROOT_LOGGER_STR
+from operator import itemgetter
 
 logger = logging.getLogger(ROOT_LOGGER_STR + '.' + __name__)
 
@@ -61,7 +62,9 @@ class VirtualFedProcess(FedProcess):
             deltas.append(client.compute_delta())
 
         aggregated_deltas = self.aggregate_deltas_multi_layer(
-            deltas, [1. for _ in self.clients])
+            deltas,
+            #[1. for _ in self.clients]
+            [train_size[client] / sum(train_size) for client in range(len(self.clients))])
         self.server.apply_delta(aggregated_deltas)
 
         server_test_accs = np.zeros(num_rounds)
@@ -141,7 +144,10 @@ class VirtualFedProcess(FedProcess):
             #              for client in clients_sampled])
 
             aggregated_deltas = self.aggregate_deltas_multi_layer(
-                deltas, [1. for _ in self.clients])
+                deltas,
+                #[1. for _ in self.clients]
+                [train_size[client] / sum(train_size) for client in clients_sampled]
+                )
             self.server.apply_delta(aggregated_deltas)
 
             server_test = [self.server.evaluate(test_data, verbose=0)
