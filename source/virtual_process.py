@@ -33,9 +33,9 @@ class VirtualFedProcess(FedProcess):
             client_model_class = ClientVirtualSequential
             server_model_class = ServerSequential
         for indx in self.clients_indx:
-            model = self.model_fn(client_model_class, cards_train[indx])
+            model = self.model_fn(client_model_class, cards_train[indx], cards_train[indx]/sum(cards_train))
             self.clients.append(model)
-        self.server = self.model_fn(server_model_class, sum(cards_train))
+        self.server = self.model_fn(server_model_class, sum(cards_train), 1.)
 
     def fit(self, federated_train_data, num_rounds, clients_per_round,
             epochs_per_round, federated_test_data=None,
@@ -138,10 +138,6 @@ class VirtualFedProcess(FedProcess):
                     {key.replace('val_', ''): history_single.history[key]
                      for key in history_single.history.keys()
                      if 'val' in key}
-
-            # aggregated_deltas = self.aggregate_deltas_multi_layer(
-            #     deltas, [train_size[client]/sum(train_size)
-            #              for client in clients_sampled])
 
             aggregated_deltas = self.aggregate_deltas_multi_layer(
                 deltas,
