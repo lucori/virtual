@@ -253,12 +253,14 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
             elif (issubclass(layer_class, Conv2DVirtual)
                   or issubclass(layer_class, Conv2DVirtualNatural)):
                 client_params = dict(layer_params)
+                server_params = dict(layer_params)
 
                 if issubclass(layer_class, Conv2DVirtualNatural):
                     natural_initializer = natural_initializer_fn(
                         untransformed_scale_initializer=layer_params['untransformed_scale_initializer'])
                     client_params['kernel_posterior_fn'] = client_posterior_fn(natural_initializer)
                     client_params['kernel_prior_fn'] = client_prior_fn()
+                    server_params['client_weight'] = client_weight
 
                 client_params['kernel_divergence_fn'] = client_divergence_fn
                 client_params['activation'] = 'linear'
@@ -266,7 +268,6 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                 client_path = tfp.layers.Convolution2DReparameterization(
                     **client_params)(client_path)
 
-                server_params = dict(layer_params)
                 server_params['kernel_divergence_fn'] = server_divergence_fn
                 server_params['num_clients'] = dict_conf['num_clients']
                 server_params['prior_scale'] = dict_conf['prior_scale']
