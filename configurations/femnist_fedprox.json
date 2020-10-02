@@ -4,11 +4,11 @@
     },
     "data_set_conf":{
         "name": "femnist",
-        "num_clients": 1
+        "num_clients": 100
     },
     "training_conf": {"method": "fedprox",
-                     "tot_epochs_per_client": 120000,
-                      "clients_per_round": 1,
+                     "tot_epochs_per_client": 200000,
+                     "optimizer": "adam",
                      "tensorboard_updates": 1
                      },
    "model_conf": { "layers": [{
@@ -28,11 +28,10 @@
                 "activation": "softmax"
               }]
               },
-  "hp": {"epochs_per_round": [1],
-        "learning_rate": [0.1, 0.001, 0.0001],
-        "l2_reg": [0, 0.1, 0.001, 0.0001],
-        "batch_size": [20],
-        "hierarchical": [false],
-         "optimizer": ["adam", "sgd"]
-  }
+   "hp": {"epochs_per_round": [1],
+         "learning_rate": [0.002],
+         "batch_size": [20],
+         "l2_reg": [0.0001],
+         "clients_per_round": [1, 5, 10]
+   }
 }
