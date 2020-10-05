@@ -4,7 +4,7 @@
     },
     "data_set_conf":{
         "name": "femnist",
-        "num_clients": 10
+        "num_clients": 100
     },
     "training_conf": {"method": "virtual",
                      "tot_epochs_per_client": 2500,
@@ -14,19 +14,19 @@
    "model_conf": {
               "layers": [{
                 "input_shape": [784],
-                "name": "DenseLocalReparametrizationNaturalShared",
+                "name": "DenseReparametrizationShared",
                 "units": 100,
                 "activation": "relu",
                 "bias_posterior_fn": null
               },
                 {
-                "name": "DenseLocalReparametrizationNaturalShared",
+                "name": "DenseReparametrizationShared",
                 "units": 100,
                 "activation": "relu",
                 "bias_posterior_fn": null
               },
                 {
-                "name": "DenseLocalReparametrizationNaturalShared",
+                "name": "DenseReparametrizationShared",
                 "units": 10,
                 "activation": "softmax",
                 "bias_posterior_fn": null
@@ -34,13 +34,13 @@
               "prior_scale": 1.0
    },
    "hp": {"epochs_per_round": [1],
-          "kl_weight": [0.000001, 0.0000001, 0.00000001],
+          "kl_weight": [0.0000001],
           "batch_size": [20],
           "hierarchical": [false],
           "clients_per_round": [10],
-          "learning_rate": [100000000, 50000000, 20000000, 10000000, 5000000, 2000000],
+          "learning_rate": [0.01],
           "optimizer": ["sgd"],
           "scale_init": [[-5, 0.1]],
-          "damping_factor": [0.1, 0.2, 0.3, 0.4, 0.5]
+          "damping_factor": [0.4]
    }
 }

@@ -12,30 +12,30 @@
                      },
    "model_conf": { "layers": [{
                 "input_shape": [784],
-                "name": "DenseCentered",
+                "name": "Dense",
                 "units": 100,
                 "activation": "relu",
                 "use_bias": false
               },
                 {
-                "name": "DenseCentered",
+                "name": "Dense",
                 "units": 100,
                 "activation": "relu",
                 "use_bias": false
               },
                 {
-                "name": "DenseCentered",
+                "name": "Dense",
                 "units": 10,
                 "activation": "softmax",
                 "use_bias": false
               }]
               },
-  "hp": {"epochs_per_round": [1, 2, 5, 10, 20, 50],
-        "learning_rate": [0.01],
-        "l2_reg": [0, 0.00001, 0.0001],
+  "hp": {"epochs_per_round": [1000],
+        "learning_rate": [0.01, 0.001, 0.002],
+        "l2_reg": [0],
         "batch_size": [20],
         "hierarchical": [false],
         "optimizer": ["sgd"],
-        "clients_per_round": [10, 20]
+        "clients_per_round": [10]
   }
 }
