@@ -11,8 +11,6 @@ from tensorflow.python.framework import ops
 import tensorflow_probability as tfp
 from tensorflow_probability.python import distributions as tfd
 from tensorflow_probability.python.layers import util as tfp_layers_util
-
-
 from source.centered_layers import LayerCentered
 from source.tfp_utils import (renormalize_mean_field_normal_fn,
                               default_tensor_multivariate_normal_fn,

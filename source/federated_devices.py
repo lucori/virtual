@@ -36,10 +36,10 @@ class _ClientVirtual(_Client):
             if hasattr(layer, 'apply_damping'):
                 layer.apply_damping(damping_factor)
 
-    def initialize_kernel_posterior(self, num_clients=1.):
+    def initialize_kernel_posterior(self):
         for layer in self.layers:
             if hasattr(layer, 'initialize_kernel_posterior'):
-                layer.initialize_kernel_posterior(num_clients)
+                layer.initialize_kernel_posterior()
 
     def call(self, inputs, training=None, mask=None):
         if self.num_samples > 1:

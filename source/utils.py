@@ -1,12 +1,11 @@
 import os
 import logging
-
-import tensorflow as tf
 import numpy as np
 import GPUtil
-
 from source.constants import ROOT_LOGGER_STR
-
+import tensorflow as tf
+from tensorflow.python.eager import context
+from tensorflow.python.ops import summary_ops_v2
 
 logger = logging.getLogger(ROOT_LOGGER_STR + '.' + __name__)
 
@@ -78,3 +77,40 @@ class FlattenedCategoricalAccuracy(tf.keras.metrics.SparseCategoricalAccuracy):
             sample_weight = tf.reshape(sample_weight, [-1, 1])
         return super().update_state(
             y_true, y_pred, sample_weight)
+
+
+class CustomTensorboard(tf.keras.callbacks.TensorBoard):
+
+    def __init__(self, *args, **kwargs):
+        optimizer = kwargs.pop('optimizer', None)
+        super(CustomTensorboard, self).__init__(*args, **kwargs)
+        self.optimizer = optimizer
+
+    def _log_distr(self, epoch):
+        """Logs the weights of the gaussian distributions to TensorBoard."""
+        writer = self._get_writer(self._train_run_name)
+        with context.eager_mode(), \
+             writer.as_default(), \
+             summary_ops_v2.always_record_summaries():
+            for layer in self.model.layers:
+                for weight in layer.trainable_weights:
+                    tf.summary.histogram(layer.name + '/gamma',
+                                         weight[..., 0], step=epoch)
+                    tf.summary.histogram(layer.name + '/prec',
+                                         weight[..., 1], step=epoch)
+                summary_ops_v2.histogram(layer.name + '/gamma_reparametrized', layer.kernel_posterior.distribution.gamma,
+                                         step=epoch)
+                summary_ops_v2.histogram(layer.name + '/prec_reparametrized', layer.kernel_posterior.distribution.prec,
+                                         step=epoch)
+            writer.flush()
+
+    def on_epoch_end(self, epoch, logs=None):
+        """Runs metrics and histogram summaries at epoch end."""
+        self._log_metrics(logs, prefix='', step=epoch)
+
+        if self.histogram_freq and epoch % self.histogram_freq == 0:
+            self._log_weights(epoch)
+            self._log_distr(epoch)
+
+        if self.embeddings_freq and epoch % self.embeddings_freq == 0:
+            self._log_embeddings(epoch)

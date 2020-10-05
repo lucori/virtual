@@ -93,11 +93,11 @@ class NormalNatural(tfd.Distribution):
 
     @property
     def loc(self):
-        return tf.math.multiply(self.gamma, tf.math.xdivy(1., self.prec + eps))
+        return tf.math.multiply_no_nan(self.gamma, tf.math.reciprocal_no_nan(self.prec))
 
     @property
     def scale(self):
-        return tf.math.sqrt(tf.math.xdivy(1., self.prec + eps))
+        return tf.math.sqrt(tf.math.reciprocal_no_nan(self.prec))
 
     def _sample_n(self, n, seed=None):
         gamma = tf.convert_to_tensor(self.gamma)
@@ -106,9 +106,8 @@ class NormalNatural(tfd.Distribution):
                           axis=0)
         sampled = tf.random.normal(
             shape=shape, mean=0., stddev=1., dtype=self.dtype, seed=seed)
-        inverse_prec = tf.math.xdivy(1., prec + eps)
 
-        return tf.math.multiply(sampled, tf.math.sqrt(inverse_prec)) + tf.math.multiply(gamma, inverse_prec)
+        return tf.math.multiply(sampled, self.scale) + self.loc
 
     def _log_prob(self, x):
         prec = tf.convert_to_tensor(self.prec)
@@ -196,8 +195,8 @@ def _kl_normal_natural(a, b, name=None):
         a_prec = tf.convert_to_tensor(a.prec)
         b_prec = tf.convert_to_tensor(b.prec)  # We'll read it thrice.
         diff_log_prec = tf.math.log(a.prec + eps) - tf.math.log(b_prec + eps)
-        inverse_a_prec = tf.math.xdivy(1., a_prec + eps)
-        inverse_b_prec = tf.math.xdivy(1., a_prec + eps)
+        inverse_a_prec = tf.math.reciprocal_no_nan(a_prec)
+        inverse_b_prec = tf.math.reciprocal_no_nan(a_prec)
         return (
                 0.5 * tf.multiply(b_prec, tf.math.squared_difference(tf.math.multiply(a.gamma, inverse_a_prec),
                                                                      tf.math.multiply(b.gamma, inverse_b_prec))) +

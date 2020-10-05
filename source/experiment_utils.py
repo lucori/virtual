@@ -6,7 +6,7 @@ import tensorflow as tf
 import tensorflow_federated as tff
 import tensorflow_probability as tfp
 from tensorflow_probability.python.distributions import kullback_leibler as kl_lib
-from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, RNN
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, RNN, Dense, Embedding, LSTMCell
 import gc
 
 from source.virtual_process import VirtualFedProcess
@@ -34,12 +34,13 @@ from source.natural_raparametrization_layer import DenseReparametrizationNatural
                                                    DenseSharedNatural, \
                                                    natural_mean_field_normal_fn, \
                                                    natural_tensor_multivariate_normal_fn, \
-                                                   natural_initializer_fn
+                                                   natural_initializer_fn, \
+                                                   NaturalGaussianEmbedding, LSTMCellVariationalNatural
 from source.tfp_utils import precision_from_untransformed_scale
 from source.constants import ROOT_LOGGER_STR
 from tensorflow_probability.python.layers import DenseReparameterization
 from source.learning_rate_multipliers_opt import LR_SGD
-from tensorflow.keras.layers import Dense
+from source.federated_devices import _Server
 
 logger = logging.getLogger(ROOT_LOGGER_STR + '.' + __name__)
 
@@ -130,13 +131,17 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                     lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
                 layer_params['bias_regularizer'] = \
                     lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
-            if layer_class == GaussianEmbedding:
+            if layer_class == GaussianEmbedding or layer_class == NaturalGaussianEmbedding:
                 layer_params['embedding_divergence_fn'] = kernel_divergence_fn
-                layer_params['num_clients'] = dict_conf['num_clients']
-                layer_params['prior_scale'] = dict_conf['prior_scale']
                 layer_params['batch_input_shape'] = [dict_conf['batch_size'],
                                                      dict_conf['seq_length']]
                 layer_params['mask_zero'] = True
+                if layer_class == GaussianEmbedding:
+                    layer_params['num_clients'] = dict_conf['num_clients']
+                    layer_params['prior_scale'] = dict_conf['prior_scale']
+                if layer_class == NaturalGaussianEmbedding:
+                    layer_params['client_weight'] = client_weight
+
             if layer_class == LSTMCellCentered:
                 cell_params = dict(layer_params)
                 cell_params['kernel_regularizer'] = kernel_reg_fn
@@ -147,9 +152,12 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                                'return_sequences': True,
                                'stateful': True}
                 layer_class = RNNCentered
-            if layer_class == LSTMCellVariational:
+            if layer_class == LSTMCellVariational or layer_class == LSTMCellVariationalNatural:
                 cell_params = dict(layer_params)
-                cell_params['num_clients'] = dict_conf['num_clients']
+                if layer_class == LSTMCellVariational:
+                    cell_params['num_clients'] = dict_conf['num_clients']
+                if layer_class == LSTMCellVariationalNatural:
+                    cell_params['client_weight'] = client_weight
                 cell_params['kernel_divergence_fn'] = kernel_divergence_fn
                 cell_params['recurrent_kernel_divergence_fn'] = \
                     reccurrent_divergence_fn
@@ -232,11 +240,12 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                     server_params['client_weight'] = client_weight
                 client_params = dict(layer_params)
                 client_params['kernel_divergence_fn'] = client_divergence_fn
-                client_params['activation'] = 'linear'
+                #client_params['activation'] = 'linear'
                 server_params['activation'] = 'linear'
                 if issubclass(layer_class, DenseSharedNatural):
                     natural_initializer = natural_initializer_fn(
-                        untransformed_scale_initializer=layer_params['untransformed_scale_initializer'])
+                        untransformed_scale_initializer=tf.random_normal_initializer(mean=-5,
+                                                                                     stddev=0.1))
                     client_params['kernel_posterior_fn'] = client_posterior_fn(natural_initializer)
                     client_params['kernel_prior_fn'] = client_prior_fn()
 
@@ -246,9 +255,18 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                     **client_params)(client_path)
                 print('server par:', server_params, 'layer_class', layer_class)
                 server_path = layer_class(**server_params)(server_path)
-                client_path = tf.keras.layers.Activation(
-                    activation=layer_params['activation'])(
-                    tf.keras.layers.Add()([(server_path), Gate()(client_path)]))
+                gate_initializer = tf.keras.initializers.RandomUniform(minval=0, maxval=0.1)
+                if issubclass(model_class, _Server):
+                    print('use zero initializaer')
+                    gate_initializer = tf.keras.initializers.Constant(0.)
+                server_path = tf.keras.layers.Activation(
+                     activation=layer_params['activation'])(
+                     tf.keras.layers.Add()([server_path, Gate(gate_initializer)(client_path)]))
+                # client_path = tf.keras.layers.Activation(
+                #      activation=layer_params['activation'])(
+                #      tf.keras.layers.Add()([Gate()(server_path), (client_path)]))
+                #client_path = tf.keras.layers.Activation(
+                #    activation=layer_params['activation'])(client_path)
 
             elif (issubclass(layer_class, Conv2DVirtual)
                   or issubclass(layer_class, Conv2DVirtualNatural)):
@@ -306,10 +324,9 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                 client_path = layer_class(**layer_params)(client_path)
                 server_path = layer_class(**layer_params)(server_path)
 
-        return model_class(inputs=in_layer, outputs=client_path)
+        return model_class(inputs=in_layer, outputs=server_path)
 
     def compile_model(model):
-        model.summary()
         def loss_fn(y_true, y_pred):
             return tf.keras.losses.sparse_categorical_crossentropy(y_true, y_pred) + sum(model.losses)
 
@@ -346,14 +363,14 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                  'config': {'learning_rate': lr_schedule}})
 
         #TODO: adjust properly
-        LR_mult_dict = {}
-        for layer in model.layers:
-            if 'gate' in layer.name:
-                LR_mult_dict[layer.name] = 1e-10
-            else:
-                LR_mult_dict[layer.name] = 1.
-
-        optimizer = LR_SGD(lr=lr_schedule, multipliers=LR_mult_dict)
+        # LR_mult_dict = {}
+        # for layer in model.layers:
+        #     if 'gate' in layer.name:
+        #         LR_mult_dict[layer.name] = 1e-8
+        #     else:
+        #         LR_mult_dict[layer.name] = 1.
+        #
+        # optimizer = LR_SGD(lr=lr_schedule, multipliers=LR_mult_dict)
 
         model.compile(optimizer=optimizer,
                       loss=loss_fn,

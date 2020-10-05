@@ -84,9 +84,13 @@ class FedProx(FedProcess):
                      for key in history_single.history.keys()
                      if 'val' in key}
 
+            train_size_sampled = itemgetter(*clients_sampled)(train_size)
+            if clients_per_round == 1:
+                train_size_sampled = [train_size_sampled]
+
             aggregated_deltas = self.aggregate_deltas_multi_layer(
                 deltas,
-                [train_size[client] / sum(itemgetter(*clients_sampled)(train_size)) for client in clients_sampled]
+                [train_size[client] / sum(train_size_sampled) for client in clients_sampled]
                 )
             self.server.apply_delta(aggregated_deltas)
             test = [self.server.evaluate(test_data, verbose=0)
