@@ -28,13 +28,13 @@ def gpu_session(num_gpus=None, gpus=None):
     logger.info(f'Cuda devices: {gpus}') if gpus else \
         logger.info('No Cuda devices')
 
-    # if gpus or num_gpus > 0:
-    #     logger.info(f"{gpus}, "
-    #                 f"{tf.config.experimental.list_physical_devices('GPU')}")
-    #     gpus = [tf.config.experimental.list_physical_devices('GPU')[int(gpu)] for gpu in gpus]
-    #     tf.config.experimental.set_visible_devices(gpus, 'GPU')
-    #     tf.config.set_soft_device_placement(True)
-    #     [tf.config.experimental.set_memory_growth(gpu, enable=True) for gpu in gpus]
+    if gpus or num_gpus > 0:
+        logger.info(f"{gpus}, "
+                     f"{tf.config.experimental.list_physical_devices('GPU')}")
+        gpus = [tf.config.experimental.list_physical_devices('GPU')[int(gpu)] for gpu in gpus]
+        tf.config.experimental.set_visible_devices(gpus, 'GPU')
+        tf.config.set_soft_device_placement(True)
+        [tf.config.experimental.set_memory_growth(gpu, enable=True) for gpu in gpus]
 
 
 def set_free_gpus(num):
@@ -42,6 +42,7 @@ def set_free_gpus(num):
     # returns: string; listing a total of 'num' available GPUs.
 
     list_gpu = GPUtil.getAvailable(limit=num, maxMemory=0.01)
+    print(list_gpu)
     return str(list_gpu)[1:-1]
 
 
@@ -82,9 +83,8 @@ class FlattenedCategoricalAccuracy(tf.keras.metrics.SparseCategoricalAccuracy):
 class CustomTensorboard(tf.keras.callbacks.TensorBoard):
 
     def __init__(self, *args, **kwargs):
-        optimizer = kwargs.pop('optimizer', None)
         super(CustomTensorboard, self).__init__(*args, **kwargs)
-        self.optimizer = optimizer
+        self.epoch = 0
 
     def _log_distr(self, epoch):
         """Logs the weights of the gaussian distributions to TensorBoard."""
@@ -94,17 +94,21 @@ class CustomTensorboard(tf.keras.callbacks.TensorBoard):
              summary_ops_v2.always_record_summaries():
             for layer in self.model.layers:
                 for weight in layer.trainable_weights:
-                    tf.summary.histogram(layer.name + '/gamma',
-                                         weight[..., 0], step=epoch)
-                    tf.summary.histogram(layer.name + '/prec',
-                                         weight[..., 1], step=epoch)
-                summary_ops_v2.histogram(layer.name + '/gamma_reparametrized', layer.kernel_posterior.distribution.gamma,
+                    if 'natural' in layer.name:
+                        tf.summary.histogram(layer.name + '/gamma',
+                                             weight[..., 0], step=epoch)
+                        tf.summary.histogram(layer.name + '/prec',
+                                             weight[..., 1], step=epoch)
+                if hasattr(layer, 'kernel_posterior'):
+                    tf.summary.histogram(layer.name + '/gamma_reparametrized', layer.kernel_posterior.distribution.gamma,
                                          step=epoch)
-                summary_ops_v2.histogram(layer.name + '/prec_reparametrized', layer.kernel_posterior.distribution.prec,
+                    tf.summary.histogram(layer.name + '/prec_reparametrized', layer.kernel_posterior.distribution.prec,
                                          step=epoch)
             writer.flush()
 
     def on_epoch_end(self, epoch, logs=None):
+        self.epoch = self.epoch + 1
+        epoch = self.epoch
         """Runs metrics and histogram summaries at epoch end."""
         self._log_metrics(logs, prefix='', step=epoch)
 

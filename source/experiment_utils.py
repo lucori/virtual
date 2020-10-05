@@ -327,7 +327,10 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
 
         return model_class(inputs=in_layer, outputs=server_path)
 
-    def compile_model(model):
+    def compile_model(model, client_weight=None):
+        if not client_weight:
+            client_weight = 1.
+
         def loss_fn(y_true, y_pred):
             return tf.keras.losses.sparse_categorical_crossentropy(y_true, y_pred) + sum(model.losses)
 
@@ -338,12 +341,12 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
 
         if "decay_rate" in dict_conf:
             lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
-                dict_conf['learning_rate'],
+                dict_conf['learning_rate'] / client_weight,
                 decay_steps=dict_conf['decay_steps'],
                 decay_rate=dict_conf['decay_rate'],
                 staircase=True)
         else:
-            lr_schedule = dict_conf['learning_rate']
+            lr_schedule = dict_conf['learning_rate'] / client_weight
 
         if "momentum" in dict_conf:  # Case of SGD
             optimizer = tf.optimizers.get(
@@ -384,7 +387,7 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
         if 'hierarchical' in dict_conf and dict_conf['hierarchical']:
             create = create_model_hierarchical
 
-        model = compile_model(create(model_class, train_size, client_weight))
+        model = compile_model(create(model_class, train_size, client_weight), client_weight)
         if dict_conf['method'] == 'fedavg':
             return tff.learning.from_compiled_keras_model(model, sample_batch)
         return model
@@ -404,7 +407,10 @@ def run_simulation(model_fn, federated_train_data, federated_test_data,
                             train_size=train_size, test_size=test_size,
                             federated_test_data=federated_test_data,
                             tensorboard_updates=cfgs['tensorboard_updates'],
-                            logdir=logdir, hierarchical=cfgs['hierarchical'])
+                            logdir=logdir, hierarchical=cfgs['hierarchical'],
+                            verbose=cfgs['verbose'],
+                            server_learning_rate=cfgs['server_learning_rate'],
+                            MTL=True)
         tf.keras.backend.clear_session()
         del virtual_process
         gc.collect()
@@ -444,7 +450,10 @@ def run_simulation(model_fn, federated_train_data, federated_test_data,
                              train_size=train_size, test_size=test_size,
                              federated_test_data=federated_test_data,
                              tensorboard_updates=cfgs['tensorboard_updates'],
-                             logdir=logdir)
+                             logdir=logdir,
+                             verbose=cfgs['verbose'],
+                             server_learning_rate=cfgs['server_learning_rate'],
+                             MTL=False)
         tf.keras.backend.clear_session()
         del fed_prox_process
         gc.collect()
