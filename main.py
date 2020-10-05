@@ -197,6 +197,7 @@ def run_experiments(configs, root_path, data_dir=None, use_scratch=False):
     training_conf = configs['training_conf']
     model_conf = configs['model_conf']
     hp_conf = configs['hp']
+    session_conf = configs['session']
     if 'input_shape' in model_conf:
         model_conf['input_shape'] = tuple(model_conf['input_shape'])
 
@@ -222,13 +223,18 @@ def run_experiments(configs, root_path, data_dir=None, use_scratch=False):
         all_params = {**data_set_conf,
                       **training_conf,
                       **model_conf,
-                      **exp_conf}
+                      **exp_conf,
+                      **session_conf}
         training_conf['num_rounds'] = \
             int(all_params['tot_epochs_per_client'] * all_params['num_clients']
                 / (all_params['clients_per_round']
                    * all_params['epochs_per_round']))
         all_params['num_rounds'] = training_conf['num_rounds']
-
+        if all_params.pop('check_numerics', None):
+            print('enabled check numerics')
+            tf.debugging.enable_check_numerics()
+        else:
+            print('no debugging')
         # Log configurations
         logdir_run = logdir / f'{session_num}_{current_time}'
         logger.info(f"saving results in {logdir_run}")
