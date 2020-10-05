@@ -342,6 +342,7 @@ class Conv2DVirtualNatural(tfp.layers.Convolution2DReparameterization,
             data_format='channels_last',
             dilation_rate=1,
             activation=None,
+            client_weight=1.,
             activity_regularizer=None,
             kernel_posterior_fn=None,
             kernel_posterior_tensor_fn=(lambda d: d.sample()),
@@ -352,7 +353,6 @@ class Conv2DVirtualNatural(tfp.layers.Convolution2DReparameterization,
             bias_posterior_tensor_fn=lambda d: d.sample(),
             bias_prior_fn=None,
             bias_divergence_fn=lambda q, p, ignore: tfd.kl_divergence(q, p),
-            client_weight=1.,
             **kwargs):
 
         self.untransformed_scale_initializer = None
@@ -479,6 +479,7 @@ class Conv1DVirtualNatural(tfp.layers.Convolution1DReparameterization,
             kernel_size,
             strides=1,
             padding='valid',
+            client_weight=1.,
             data_format='channels_last',
             dilation_rate=1,
             activation=None,
@@ -492,7 +493,6 @@ class Conv1DVirtualNatural(tfp.layers.Convolution1DReparameterization,
             bias_posterior_tensor_fn=lambda d: d.sample(),
             bias_prior_fn=None,
             bias_divergence_fn=lambda q, p, ignore: tfd.kl_divergence(q, p),
-            client_weight=1.,
             **kwargs):
 
         self.untransformed_scale_initializer = None

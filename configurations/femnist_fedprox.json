@@ -8,6 +8,7 @@
     },
     "training_conf": {"method": "fedprox",
                      "tot_epochs_per_client": 1000,
+                     "optimizer": "sgd",
                      "tensorboard_updates": 1
                      },
    "model_conf": { "layers": [{
@@ -30,12 +31,10 @@
                 "use_bias": false
               }]
               },
-  "hp": {"epochs_per_round": [1, 2, 5, 10, 20, 50],
-        "learning_rate": [0.01],
-        "l2_reg": [0, 0.00001, 0.0001],
-        "batch_size": [20],
-        "hierarchical": [false],
-        "optimizer": ["sgd"],
-        "clients_per_round": [10, 20]
-  }
+   "hp": {"epochs_per_round": [1],
+         "learning_rate": [0.02],
+         "batch_size": [20],
+         "l2_reg": [0.001],
+         "clients_per_round": [1, 5, 10]
+   }
 }
