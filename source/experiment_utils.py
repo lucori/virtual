@@ -93,16 +93,15 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                     tf.random_normal_initializer(mean=untransformed_scale,
                                                  stddev=scale_init[1])
 
-            if ('prec_init' in dict_conf
+            if ('loc_init' in dict_conf
                     and (issubclass(layer_class, DenseShared)
-                         or layer_class == Conv2DVirtual)):
-                prec_init = dict_conf['prec_init']
-                prec_init = prec_init[0]
-                if prec_init[0] == 'auto':
-                    prec = tf.constant(train_size, dtype=tf.float32)
-                layer_params['precision_initializer'] = \
-                    tf.random_normal_initializer(mean=prec,
-                                                 stddev=prec_init[1])
+                         or issubclass(layer_class, DenseSharedNatural)
+                         or layer_class == Conv2DVirtual
+                         or layer_class == Conv2DVirtualNatural)):
+                loc_init = dict_conf['loc_init']
+                layer_params['loc_initializer'] = \
+                    tf.random_normal_initializer(mean=loc_init[0],
+                                                 stddev=loc_init[1])
 
             if layer_class == DenseReparameterization:
                 layer_params['kernel_divergence_fn'] = kernel_divergence_fn
@@ -148,7 +147,7 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                 cell_params['recurrent_regularizer'] = kernel_reg_fn
                 cell_params['bias_regularizer'] = kernel_reg_fn
                 cell = layer_class(**cell_params)
-                layer_params= {'cell': cell,
+                layer_params = {'cell': cell,
                                'return_sequences': True,
                                'stateful': True}
                 layer_class = RNNCentered
@@ -227,8 +226,16 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                 layer_params['untransformed_scale_initializer'] = \
                     tf.random_normal_initializer(mean=untransformed_scale,
                                                  stddev=scale_init[1])
+            if ('loc_init' in dict_conf
+                    and (issubclass(layer_class, DenseShared)
+                         or issubclass(layer_class, DenseSharedNatural)
+                         or layer_class == Conv2DVirtual
+                         or layer_class == Conv2DVirtualNatural)):
+                loc_init = dict_conf['loc_init']
+                layer_params['loc_initializer'] = \
+                    tf.random_normal_initializer(mean=loc_init[0],
+                                                 stddev=loc_init[1])
 
-            # TODO: Maybe try non-linear activation
             if issubclass(layer_class, DenseShared) \
                     or issubclass(layer_class, DenseSharedNatural):
                 server_params = dict(layer_params)
@@ -240,16 +247,15 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                     server_params['client_weight'] = client_weight
                 client_params = dict(layer_params)
                 client_params['kernel_divergence_fn'] = client_divergence_fn
-                #client_params['activation'] = 'linear'
                 server_params['activation'] = 'linear'
                 if issubclass(layer_class, DenseSharedNatural):
                     natural_initializer = natural_initializer_fn(
-                        untransformed_scale_initializer=tf.random_normal_initializer(mean=-5,
-                                                                                     stddev=0.1))
+                        untransformed_scale_initializer=tf.random_normal_initializer(mean=-5, stddev=0.1))
                     client_params['kernel_posterior_fn'] = client_posterior_fn(natural_initializer)
                     client_params['kernel_prior_fn'] = client_prior_fn()
 
                 client_params.pop('untransformed_scale_initializer', None)
+                client_params.pop('loc_initializer', None)
                 print('client par:', client_params)
                 client_path = tfp.layers.DenseReparameterization(
                     **client_params)(client_path)
@@ -262,11 +268,6 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                 server_path = tf.keras.layers.Activation(
                      activation=layer_params['activation'])(
                      tf.keras.layers.Add()([server_path, Gate(gate_initializer)(client_path)]))
-                # client_path = tf.keras.layers.Activation(
-                #      activation=layer_params['activation'])(
-                #      tf.keras.layers.Add()([Gate()(server_path), (client_path)]))
-                #client_path = tf.keras.layers.Activation(
-                #    activation=layer_params['activation'])(client_path)
 
             elif (issubclass(layer_class, Conv2DVirtual)
                   or issubclass(layer_class, Conv2DVirtualNatural)):
@@ -366,15 +367,17 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                 {'class_name': dict_conf['optimizer'],
                  'config': {'learning_rate': lr_schedule}})
 
-        #TODO: adjust properly
-        # LR_mult_dict = {}
-        # for layer in model.layers:
-        #     if 'gate' in layer.name:
-        #         LR_mult_dict[layer.name] = 1e-8
-        #     else:
-        #         LR_mult_dict[layer.name] = 1.
-        #
-        # optimizer = LR_SGD(lr=lr_schedule, multipliers=LR_mult_dict)
+        model.summary()
+        if dict_conf['optimizer'] == 'sgd':
+            LR_mult_dict = {}
+            for layer in model.layers:
+                if 'gate' in layer.name:
+                    LR_mult_dict[layer.name] = client_weight * 1e-8
+                elif 'dense_reparameterization' in layer.name:
+                    LR_mult_dict[layer.name] = client_weight
+                else:
+                    LR_mult_dict[layer.name] = 1.
+            optimizer = LR_SGD(lr=lr_schedule, multipliers=LR_mult_dict)
 
         model.compile(optimizer=optimizer,
                       loss=loss_fn,

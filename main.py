@@ -182,7 +182,7 @@ def submit_jobs(configs, root_path, data_dir, hour=12, mem=8000,
 
 
 def run_experiments(configs, root_path, data_dir=None, use_scratch=False):
-
+    print('enter experiment function')
     if use_scratch:
         dir_name = data_dir.name
         temp_dir = Path(os_environ['TMPDIR']) / dir_name
@@ -191,7 +191,8 @@ def run_experiments(configs, root_path, data_dir=None, use_scratch=False):
         data_dir = temp_dir
 
     current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-
+    print(current_time)
+    print(configs)
     # Configs
     data_set_conf = configs['data_set_conf']
     training_conf = configs['training_conf']
@@ -340,6 +341,7 @@ def main():
                     hour=args.time, mem=args.memory, use_scratch=args.scratch,
                     reps=args.repetitions)
     else:
+        print('before entering run experiment function')
         gpu_session(configs['session']['num_gpus'])
         run_experiments(configs, args.result_dir, args.data_dir, args.scratch)
 

@@ -121,8 +121,10 @@ class FedProcess:
         all_client_test_losses = np.zeros(num_rounds)
         selected_client_test_losses = np.zeros(num_rounds)
         training_losses = np.zeros(num_rounds)
+
         overall_tensorboard = CustomTensorboard(log_dir=str(train_log_dir),
-                                                histogram_freq=1, profile_batch=0)
+                                                histogram_freq=max(0, verbose-2),
+                                                profile_batch=max(0, verbose-2))
         if verbose >= 2:
             if callbacks:
                 callbacks.append(overall_tensorboard)

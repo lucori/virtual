@@ -154,6 +154,10 @@ class DenseSharedNatural(VariationalReparametrizedNatural):
         if 'untransformed_scale_initializer' in kwargs:
             self.untransformed_scale_initializer = \
                 kwargs.pop('untransformed_scale_initializer')
+        self.loc_initializer = None
+        if 'loc_initializer' in kwargs:
+            self.loc_initializer = \
+                kwargs.pop('loc_initializer')
 
         if kernel_posterior_fn is None:
             kernel_posterior_fn = self.renormalize_natural_mean_field_normal_fn
@@ -201,8 +205,8 @@ class DenseSharedNatural(VariationalReparametrizedNatural):
         natural_initializer = natural_initializer_fn(
             loc_stdev=0.1, u_scale_init_avg=-5,
             u_scale_init_stdev=0.1,
-            untransformed_scale_initializer=#tf.keras.initializers.RandomUniform(-6., -2.3))
-                self.untransformed_scale_initializer)
+            untransformed_scale_initializer=self.untransformed_scale_initializer,
+            loc_initializer=self.loc_initializer)
 
         self.kernel_posterior = self.kernel_posterior_fn(
                 dtype, [in_size, self.units], 'kernel_posterior',
