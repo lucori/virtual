@@ -4,37 +4,42 @@
     },
     "data_set_conf":{
         "name": "shakespeare",
-        "num_clients": 100,
+        "num_clients": 1,
         "seq_length": 80,
         "vocab_size": 86
     },
     "training_conf": {"method": "fedprox",
-                     "tot_epochs_per_client": 500,
-                     "clients_per_round": 5,
-                     "optimizer": "adam",
+                     "tot_epochs_per_client": 300,
+                     "optimizer": "sgd",
                      "fed_avg_init": false,
-                     "tensorboard_updates": 1
+                     "tensorboard_updates": 1,
+                     "verbose": 2
     },
    "model_conf": {"layers": [{"name": "EmbeddingCentered",
                              "input_dim": 87,
                              "output_dim":  8
                             },
                             {"name": "LSTMCellCentered",
-                              "units": 256
+                              "units": 256,
+                              "use_bias": false
                             },
                             {"name": "LSTMCellCentered",
-                              "units": 256
+                              "units": 256,
+                              "use_bias": false
                             },
                             {"name": "DenseCentered",
                               "units": 87,
-                              "activation": "softmax"
+                              "activation": "softmax",
+                              "use_bias": false
                             }
                             ],
                 "architecture": "rnn"
    },
-   "hp": {"epochs_per_round": [1],
-         "learning_rate": [0.01, 0.02],
+   "hp": {"epochs_per_round": [300],
+         "learning_rate": [0.5],
+         "server_learning_rate": [1.0],
          "batch_size": [10],
-         "l2_reg": [0.0, 0.00001]
+         "l2_reg": [0.0],
+         "clients_per_round": [1]
    }
 }

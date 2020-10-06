@@ -1,0 +1,40 @@
+{
+    "session":{
+        "num_gpus": 1
+    },
+    "data_set_conf":{
+        "name": "shakespeare",
+        "num_clients": 10,
+        "seq_length": 80,
+        "vocab_size": 86
+    },
+    "training_conf": {"method": "fedavg",
+                     "tot_epochs_per_client": 500,
+                     "clients_per_round": 2,
+                     "optimizer": "sgd",
+                     "fed_avg_init": false,
+                     "tensorboard_updates": 1
+    },
+   "model_conf": {"layers": [{"name": "Embedding",
+                             "input_dim": 87,
+                             "output_dim":  8
+                            },
+                            {"name": "LSTMCell",
+                              "units": 256
+                            },
+                            {"name": "LSTMCell",
+                              "units": 256
+                            },
+                            {"name": "Dense",
+                              "units": 87,
+                              "activation": "softmax"
+                            }
+                            ],
+                "architecture": "rnn"
+   },
+   "hp": {"epochs_per_round": [1],
+         "learning_rate": [0.01],
+         "batch_size": [10],
+         "l2_reg": [0.0]
+   }
+}

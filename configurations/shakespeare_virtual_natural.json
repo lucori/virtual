@@ -9,35 +9,41 @@
         "vocab_size": 86
     },
     "training_conf": {"method": "virtual",
-                     "tot_epochs_per_client": 200,
+                     "tot_epochs_per_client": 300,
                      "clients_per_round": 1,
-                     "optimizer": "adam",
+                     "optimizer": "sgd",
                      "fed_avg_init": false,
                      "tensorboard_updates": 1,
-                     "damping_factor": 1.0
+                     "verbose": 3
+
     },
    "model_conf": {"layers": [{"name": "NaturalGaussianEmbedding",
                              "input_dim": 87,
                              "output_dim":  8
                             },
                             {"name": "LSTMCellVariationalNatural",
-                              "units": 256
+                              "units": 256,
+                              "use_bias": false
                               },
                             {"name": "LSTMCellVariationalNatural",
-                              "units": 256
+                              "units": 256,
+                              "use_bias": false
                               },
                             {"name": "DenseLocalReparametrizationNaturalShared",
                               "units": 87,
-                              "activation": "softmax"
+                              "activation": "softmax",
+                              "bias_posterior_fn": null
                             }
                             ],
                 "prior_scale": 1.0,
                 "architecture": "rnn"
    },
-   "hp": {"epochs_per_round": [1],
-          "learning_rate": [100.0],
+   "hp": {"epochs_per_round": [300],
+          "learning_rate": [10000000.0],
+          "server_learning_rate": [1.0],
           "batch_size": [10],
           "kl_weight": [0.0],
-          "hierarchical": [false]
+          "hierarchical": [false],
+          "damping_factor": [1.0]
    }
 }

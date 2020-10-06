@@ -7,9 +7,10 @@
         "num_clients": 100
     },
     "training_conf": {"method": "fedprox",
-                     "tot_epochs_per_client": 1000,
+                     "tot_epochs_per_client": 500,
                      "optimizer": "sgd",
-                     "tensorboard_updates": 1
+                     "tensorboard_updates": 1,
+                     "verbose": 0
                      },
    "model_conf": { "layers": [{
                 "input_shape": [784],
@@ -33,8 +34,9 @@
               },
    "hp": {"epochs_per_round": [1],
          "learning_rate": [0.02],
+         "server_learning_rate": [0.1, 0.2, 0.5, 1.0],
          "batch_size": [20],
-         "l2_reg": [0.001],
-         "clients_per_round": [1, 5, 10]
+         "l2_reg": [0.0],
+         "clients_per_round": [10]
    }
 }
