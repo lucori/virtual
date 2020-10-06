@@ -94,7 +94,7 @@ class CustomTensorboard(tf.keras.callbacks.TensorBoard):
              summary_ops_v2.always_record_summaries():
             for layer in self.model.layers:
                 for weight in layer.trainable_weights:
-                    if 'natural' in layer.name:
+                    if 'natural' in weight.name:
                         tf.summary.histogram(layer.name + '/gamma',
                                              weight[..., 0], step=epoch)
                         tf.summary.histogram(layer.name + '/prec',
