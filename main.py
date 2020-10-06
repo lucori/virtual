@@ -99,7 +99,7 @@ def create_hparams(hp_conf, data_set_conf, training_conf,
                          display_name='Accuracy'),
                hp.Metric('max_sparse_categorical_accuracy',
                          display_name='Max Accuracy')]
-    with tf.summary.create_file_writer(str(logdir)).as_default():
+    with tf.summary.create_file_writer(str(logdir/'train')).as_default():
         hp.hparams_config(hparams=HP_DICT.values(),
                           metrics=metrics)
     return HP_DICT
@@ -132,7 +132,7 @@ def write_hparams(hp_dict, session_num, exp_conf, data_set_conf,
         layers = layers + layer['name'] + '_'
     hparams[hp_dict['model_layers']] = layers[:-1]
 
-    with tf.summary.create_file_writer(str(logdir_run)).as_default():
+    with tf.summary.create_file_writer(str(logdir_run/'train')).as_default():
         hp.hparams(hparams)
 
 
