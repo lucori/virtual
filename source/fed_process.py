@@ -270,7 +270,7 @@ class FedProcess:
                     if MTL:
                         with self.all_client_summary_writer.as_default():
                             tf.summary.scalar(key, all_client_avg_test[i], step=round_i)
-                with self.server_summary_writer.as_default():
+                with self.train_summary_writer.as_default():
                     tf.summary.scalar('max_sparse_categorical_accuracy',
                                       max_accuracy, step=round_i)
 
