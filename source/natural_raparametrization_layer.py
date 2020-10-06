@@ -910,55 +910,6 @@ class LSTMCellVariationalNatural(tf.keras.layers.LSTMCell, VariationalReparametr
         self.recurrent_kernel = self.recurrent_kernel_posterior_tensor_fn(self.recurrent_kernel_posterior)
 
 
-class RNNVarReparametrizedNatural(tf.keras.layers.RNN):
-
-    def compute_delta(self):
-        return self.cell.compute_delta()
-
-    def renew_center(self):
-        self.cell.renew_center()
-
-    def apply_delta(self, delta):
-        self.cell.apply_delta(delta)
-
-    def receive_and_save_weights(self, layer_server):
-        self.cell.receive_and_save_weights(layer_server.cell)
-
-    def initialize_kernel_posterior(self):
-        self.cell.initialize_kernel_posterior()
-
-    def apply_damping(self, damping_factor):
-        self.cell.apply_damping(damping_factor)
-
-    def call(self,
-             inputs,
-             mask=None,
-             training=None,
-             initial_state=None,
-             constants=None):
-        self.cell.sample_weights()
-        return super(RNNVarReparametrizedNatural, self).call(inputs,
-                                                             mask=mask,
-                                                             training=training,
-                                                             initial_state=initial_state,
-                                                             constants=constants)
-
-
-class RNNReparametrizedNatural(tf.keras.layers.RNN):
-    def call(self,
-             inputs,
-             mask=None,
-             training=None,
-             initial_state=None,
-             constants=None):
-        self.cell.sample_weights()
-        return super(RNNReparametrizedNatural, self).call(inputs,
-                                                          mask=mask,
-                                                          training=training,
-                                                          initial_state=initial_state,
-                                                          constants=constants)
-
-
 class LSTMCellReparametrizationNatural(tf.keras.layers.LSTMCell):
 
     def __init__(self,
