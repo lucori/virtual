@@ -146,10 +146,10 @@ def submit_jobs(configs, root_path, data_dir, hour=12, mem=8000,
                 use_scratch=False, reps=1):
     current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     config_dir = root_path / f'temp_configs_{current_time}'
-    config_dir.mkdir(exist_ok=True)
+    config_dir.mkdir(parents=True, exist_ok=True)
 
     lsf_out_dir = root_path/ 'outs'
-    lsf_out_dir.mkdir(exist_ok=True)
+    lsf_out_dir.mkdir(parents=True, exist_ok=True)
 
     hp_conf = configs['hp']
     experiments = _gridsearch(hp_conf)
