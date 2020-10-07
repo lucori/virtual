@@ -624,6 +624,7 @@ class NaturalGaussianEmbedding(tf.keras.layers.Embedding, VariationalReparametri
                  input_length=None,
                  client_weight=1.,
                  trainable=True,
+                 embeddings_initializer=tf.keras.initializers.RandomUniform(-0.01, 0.01),
                  embedding_posterior_fn=None,
                  embedding_posterior_tensor_fn=(lambda d: d.sample()),
                  embedding_prior_fn=None,
@@ -646,6 +647,7 @@ class NaturalGaussianEmbedding(tf.keras.layers.Embedding, VariationalReparametri
                                                        mask_zero=mask_zero,
                                                        input_length=input_length,
                                                        trainable=trainable,
+                                                       embeddings_initializer=embeddings_initializer,
                                                        **kwargs)
 
         self.client_weight = client_weight
@@ -673,10 +675,8 @@ class NaturalGaussianEmbedding(tf.keras.layers.Embedding, VariationalReparametri
                                                 self.embedding_prior_fn)
 
         natural_initializer = natural_initializer_fn(
-            loc_stdev=0.1,
-            u_scale_init_avg=-5,
-            u_scale_init_stdev=0.1,
-            untransformed_scale_initializer=self.untransformed_scale_initializer)
+            untransformed_scale_initializer=self.untransformed_scale_initializer,
+            loc_initializer=self.embeddings_initializer)
 
         self.embedding_posterior = self.embedding_posterior_fn(
             dtype, shape, 'embedding_posterior',
