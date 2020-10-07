@@ -477,8 +477,8 @@ class RNNVarReparametrized(tf.keras.layers.RNN):
     def compute_delta(self):
         return self.cell.compute_delta()
 
-    def renew_center(self):
-        self.cell.renew_center()
+    def renew_center(self, center_to_update=True):
+        self.cell.renew_center(center_to_update)
 
     def apply_delta(self, delta):
         self.cell.apply_delta(delta)
