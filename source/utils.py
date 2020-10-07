@@ -94,15 +94,17 @@ class CustomTensorboard(tf.keras.callbacks.TensorBoard):
              summary_ops_v2.always_record_summaries():
             for layer in self.model.layers:
                 for weight in layer.trainable_weights:
-                    if 'natural' in weight.name:
-                        tf.summary.histogram(layer.name + '/gamma',
+                    if 'natural' in weight.name + layer.name:
+                        tf.summary.histogram(layer.name + '/' + weight.name + '_gamma',
                                              weight[..., 0], step=epoch)
-                        tf.summary.histogram(layer.name + '/prec',
+                        tf.summary.histogram(layer.name + '/' + weight.name + '_prec',
                                              weight[..., 1], step=epoch)
+                    else:
+                        tf.summary.histogram(layer.name + '/' + weight.name, weight, step=epoch)
                 if hasattr(layer, 'kernel_posterior'):
-                    tf.summary.histogram(layer.name + '/gamma_reparametrized', layer.kernel_posterior.distribution.gamma,
+                    tf.summary.histogram(layer.name + '/' + weight.name + '_gamma_reparametrized', layer.kernel_posterior.distribution.gamma,
                                          step=epoch)
-                    tf.summary.histogram(layer.name + '/prec_reparametrized', layer.kernel_posterior.distribution.prec,
+                    tf.summary.histogram(layer.name + '/' + weight.name + '_prec_reparametrized', layer.kernel_posterior.distribution.prec,
                                          step=epoch)
             writer.flush()
 
