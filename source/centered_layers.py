@@ -39,9 +39,10 @@ class LayerCentered:
                                                    self.client_center_variable_dict[key]))
         return delta_dict
 
-    def renew_center(self):
-        for key in self.client_center_variable_dict.keys():
-            self.client_center_variable_dict[key].assign(self.client_variable_dict[key])
+    def renew_center(self, center_to_updated=True):
+        if 'natural' in self.name or center_to_updated:
+            for key in self.client_center_variable_dict.keys():
+                self.client_center_variable_dict[key].assign(self.client_variable_dict[key])
 
     def apply_delta(self, delta):
         for key in self.server_variable_dict.keys():
@@ -267,8 +268,8 @@ class RNNCentered(tf.keras.layers.RNN):
     def compute_delta(self):
         return self.cell.compute_delta()
 
-    def renew_center(self):
-        self.cell.renew_center()
+    def renew_center(self, center_to_update=True):
+        self.cell.renew_center(center_to_update=True)
 
     def apply_delta(self, delta):
         self.cell.apply_delta(delta)
@@ -326,7 +327,6 @@ class EmbeddingCentered(tf.keras.layers.Embedding, LayerCentered):
         self.client_variable_dict['embeddings'] = self.embeddings
         self.server_variable_dict['embeddings'] = self.embeddings
         self.client_center_variable_dict['embeddings'] = self.embeddings_regularizer.center
-
         self.built = True
 
 
