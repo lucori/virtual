@@ -82,7 +82,8 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                     and (issubclass(layer_class, DenseShared)
                          or issubclass(layer_class, DenseSharedNatural)
                          or layer_class == Conv2DVirtual
-                         or layer_class == Conv2DVirtualNatural)):
+                         or layer_class == Conv2DVirtualNatural
+                         or layer_class == NaturalGaussianEmbedding)):
                 scale_init = dict_conf['scale_init']
                 untransformed_scale = scale_init[0]
                 if scale_init[0] == 'auto':
@@ -97,7 +98,8 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                     and (issubclass(layer_class, DenseShared)
                          or issubclass(layer_class, DenseSharedNatural)
                          or layer_class == Conv2DVirtual
-                         or layer_class == Conv2DVirtualNatural)):
+                         or layer_class == Conv2DVirtualNatural
+                         or layer_class == NaturalGaussianEmbedding)):
                 loc_init = dict_conf['loc_init']
                 layer_params['loc_initializer'] = \
                     tf.random_normal_initializer(mean=loc_init[0],
@@ -216,7 +218,8 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                     and (issubclass(layer_class, DenseShared)
                          or issubclass(layer_class, DenseSharedNatural)
                          or layer_class == Conv2DVirtual
-                         or layer_class == Conv2DVirtualNatural)):
+                         or layer_class == Conv2DVirtualNatural)
+                         or layer_class == NaturalGaussianEmbedding):
                 scale_init = dict_conf['scale_init']
                 untransformed_scale = scale_init[0]
                 if scale_init[0] == 'auto':
@@ -230,7 +233,8 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                     and (issubclass(layer_class, DenseShared)
                          or issubclass(layer_class, DenseSharedNatural)
                          or layer_class == Conv2DVirtual
-                         or layer_class == Conv2DVirtualNatural)):
+                         or layer_class == Conv2DVirtualNatural
+                         or layer_class == NaturalGaussianEmbedding)):
                 loc_init = dict_conf['loc_init']
                 layer_params['loc_initializer'] = \
                     tf.random_normal_initializer(mean=loc_init[0],
@@ -342,12 +346,12 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
 
         if "decay_rate" in dict_conf:
             lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
-                dict_conf['learning_rate'] / client_weight,
+                dict_conf['learning_rate'],
                 decay_steps=dict_conf['decay_steps'],
                 decay_rate=dict_conf['decay_rate'],
                 staircase=True)
         else:
-            lr_schedule = dict_conf['learning_rate'] / client_weight
+            lr_schedule = dict_conf['learning_rate']
 
         if "momentum" in dict_conf:  # Case of SGD
             optimizer = tf.optimizers.get(
@@ -371,12 +375,14 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
         if dict_conf['optimizer'] == 'sgd':
             LR_mult_dict = {}
             for layer in model.layers:
-                if 'gate' in layer.name:
-                    LR_mult_dict[layer.name] = client_weight * 1e-8
+                layer_to_check = layer
+                if hasattr(layer, 'cell'):
+                    layer_to_check = layer
+                if 'natural' in layer_to_check.name:
+                    LR_mult_dict[layer.name] = 1 / client_weight * dict_conf['natural_lr_mult']
                 elif 'dense_reparameterization' in layer.name:
-                    LR_mult_dict[layer.name] = client_weight
-                else:
-                    LR_mult_dict[layer.name] = 1.
+                    LR_mult_dict[layer.name] = dict_conf['natural_lr_mult']
+
             optimizer = LR_SGD(lr=lr_schedule, multipliers=LR_mult_dict)
 
         model.compile(optimizer=optimizer,
