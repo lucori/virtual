@@ -10,10 +10,10 @@ class _Client:
                 delta.append(layer.compute_delta())
         return delta
 
-    def renew_center(self):
+    def renew_center(self, center_to_update=True):
         for layer in self.layers:
             if hasattr(layer, 'renew_center'):
-                layer.renew_center()
+                layer.renew_center(center_to_update)
 
     def receive_and_save_weights(self, server):
         for l_c, l_s in zip(self.layers, server.layers):
@@ -54,7 +54,6 @@ class ClientSequential(tf.keras.Sequential, _Client):
 
     def __init__(self, layers=None, name=None, num_samples=1):
         super(ClientSequential, self).__init__(layers=layers, name=name)
-        self.s_i_to_update = False
         self.num_samples = num_samples
 
 
@@ -63,7 +62,6 @@ class ClientModel(tf.keras.Model, _Client):
     def __init__(self, *args, **kwargs):
         self.num_samples = kwargs.pop('num_samples', 1)
         super(ClientModel, self).__init__(*args, **kwargs)
-        self.s_i_to_update = False
 
 
 class ServerSequential(tf.keras.Sequential, _Server):
