@@ -17,7 +17,7 @@
                      "verbose": 3
 
     },
-   "model_conf": {"layers": [{"name": "NaturalGaussianEmbedding",
+   "model_conf": {"layers": [{"name": "EmbeddingCentered",
                              "input_dim": 87,
                              "output_dim":  8
                             },
@@ -39,11 +39,14 @@
                 "architecture": "rnn"
    },
    "hp": {"epochs_per_round": [300],
-          "learning_rate": [10000000.0],
+          "learning_rate": [10],
+          "natural_lr": [200000000.0],
           "server_learning_rate": [1.0],
           "batch_size": [10],
           "kl_weight": [0.0],
+          "l2_reg": [0.0],
           "hierarchical": [false],
-          "damping_factor": [1.0]
+          "damping_factor": [1.0],
+          "scale_init": [[-5, 0.1]]
    }
 }
