@@ -1,19 +1,22 @@
 {
     "session":{
-        "num_gpus": 1
+        "num_gpus": 1,
+        "verbose": 0
     },
     "data_set_conf":{
         "name": "femnist",
-        "num_clients": 1,
+        "num_clients": 100,
+        "server_learning_rate": 0.1,
         "shape": [1, 28, 28]
     },
     "training_conf": {"method": "virtual",
-                     "tot_epochs_per_client": 500000,
-                      "clients_per_round": 1,
-                      "epochs_per_round": 5,
+                     "tot_epochs_per_client": 10000,
+                      "clients_per_round": 10,
+                      "epochs_per_round": 1,
                      "batch_size": 20,
                      "optimizer": "sgd",
                      "fed_avg_init": false,
+                     "natural_lr_mult": 0.000000081,
                      "tensorboard_updates": 1
     },
    "model_conf": {"layers": [{"name": "Conv2DVirtualNatural",
@@ -65,7 +68,7 @@
    "hp": {
           "learning_rate": [7000000],
           "kl_weight": [0.00001],
-          "hierarchical": [true],
+          "hierarchical": [true, false],
           "scale_init": [[-5, 0.1]],
            "damping_factor": [0.5]
    }
