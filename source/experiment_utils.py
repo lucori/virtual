@@ -114,11 +114,13 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
             if issubclass(layer_class, DenseSharedNatural):
                 layer_params['kernel_divergence_fn'] = kernel_divergence_fn
                 layer_params['client_weight'] = client_weight
-            if (layer_class == Conv2DVirtual
-                    or layer_class == Conv2DVirtualNatural):
+            if layer_class == Conv2DVirtual:
                 layer_params['kernel_divergence_fn'] = kernel_divergence_fn
                 layer_params['num_clients'] = dict_conf['num_clients']
                 layer_params['prior_scale'] = dict_conf['prior_scale']
+            if layer_class == Conv2DVirtualNatural:
+                layer_params['kernel_divergence_fn'] = kernel_divergence_fn
+                layer_params['client_weight'] = client_weight
             if layer_class == DenseCentered:
                 layer_params['kernel_regularizer'] = kernel_reg_fn
                 layer_params['bias_regularizer'] = kernel_reg_fn
@@ -288,17 +290,24 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                 client_params['kernel_divergence_fn'] = client_divergence_fn
                 client_params['activation'] = 'linear'
                 client_params.pop('untransformed_scale_initializer', None)
+                client_params.pop('loc_initializer', None)
                 client_path = tfp.layers.Convolution2DReparameterization(
                     **client_params)(client_path)
 
                 server_params['kernel_divergence_fn'] = server_divergence_fn
-                server_params['num_clients'] = dict_conf['num_clients']
-                server_params['prior_scale'] = dict_conf['prior_scale']
+                if issubclass(layer_class, Conv2DVirtual):
+                    server_params['num_clients'] = dict_conf['num_clients']
+                    server_params['prior_scale'] = dict_conf['prior_scale']
                 server_path = layer_class(**server_params)(server_path)
-
-                client_path = tf.keras.layers.Activation(
+                gate_initializer = tf.keras.initializers.RandomUniform(
+                    minval=0, maxval=0.1)
+                if issubclass(model_class, _Server):
+                    print('use zero initializaer')
+                    gate_initializer = tf.keras.initializers.Constant(0.)
+                server_path = tf.keras.layers.Activation(
                     activation=layer_params['activation'])(
-                    tf.keras.layers.Add()([Gate()(server_path), client_path]))
+                    tf.keras.layers.Add()(
+                        [server_path, Gate(gate_initializer)(client_path)]))
             elif issubclass(layer_class, LSTMCellVariational):
                 server_params = dict(layer_params)
                 server_params['num_clients'] = dict_conf['num_clients']
