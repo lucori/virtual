@@ -377,11 +377,11 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
             for layer in model.layers:
                 layer_to_check = layer
                 if hasattr(layer, 'cell'):
-                    layer_to_check = layer
+                    layer_to_check = layer.cell
                 if 'natural' in layer_to_check.name:
-                    LR_mult_dict[layer.name] = 1 / client_weight * dict_conf['natural_lr_mult']
+                    LR_mult_dict[layer.name] = 1 / (lr_schedule * client_weight) * dict_conf['natural_lr']
                 elif 'dense_reparameterization' in layer.name:
-                    LR_mult_dict[layer.name] = dict_conf['natural_lr_mult']
+                    LR_mult_dict[layer.name] = 1 / lr_schedule * dict_conf['natural_lr']
 
             optimizer = LR_SGD(lr=lr_schedule, multipliers=LR_mult_dict)
 
