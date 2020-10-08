@@ -103,8 +103,6 @@ class FedProcess:
             aggregated_deltas = self.aggregate_deltas_multi_layer(
                 deltas, [size / sum(train_size) for size in train_size])
             self.server.apply_delta(aggregated_deltas)
-
-            updated_clients = [False] * len(self.clients)
         else:
             self.build()
 
@@ -120,7 +118,8 @@ class FedProcess:
         selected_client_test_losses = np.zeros(num_rounds)
         training_losses = np.zeros(num_rounds)
         overall_tensorboard = CustomTensorboard(log_dir=str(train_log_dir),
-                                                histogram_freq=1, profile_batch=0)
+                                                histogram_freq=max(0, verbose - 2),
+                                                profile_batch=max(0, verbose - 2))
         if verbose >= 2:
             if callbacks:
                 callbacks.append(overall_tensorboard)
@@ -134,7 +133,7 @@ class FedProcess:
             history_train = []
             for indx in clients_sampled:
                 self.clients[indx].receive_and_save_weights(self.server)
-                self.clients[indx].renew_center()
+                self.clients[indx].renew_center(round_i > 0)
 
                 if MTL:
                     if self.fed_avg_init == 2 or (
@@ -153,8 +152,6 @@ class FedProcess:
 
                 if MTL:
                     self.clients[indx].apply_damping(self.damping_factor)
-                    updated_clients[indx] = True
-                    self.clients[indx].s_i_to_update = True
 
                 delta = self.clients[indx].compute_delta()
                 deltas.append(delta)
