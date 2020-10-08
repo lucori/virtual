@@ -1,14 +1,16 @@
 {
     "session":{
-        "num_gpus": 1
+        "num_gpus": 1,
+         "verbose": 0
     },
     "data_set_conf":{
         "name": "femnist",
         "num_clients": 100
     },
     "training_conf": {"method": "fedprox",
-                     "tot_epochs_per_client": 1000,
-                     "tensorboard_updates": 1
+                     "tot_epochs_per_client": 10000,
+                     "tensorboard_updates": 1,
+                      "server_learning_rate": 1
                      },
    "model_conf": { "layers": [{
                 "input_shape": [784],
@@ -30,8 +32,8 @@
                 "use_bias": false
               }]
               },
-  "hp": {"epochs_per_round": [1000],
-        "learning_rate": [0.01, 0.001, 0.002],
+  "hp": {"epochs_per_round": [1],
+        "learning_rate": [0.02, 0.03],
         "l2_reg": [0],
         "batch_size": [20],
         "hierarchical": [false],
