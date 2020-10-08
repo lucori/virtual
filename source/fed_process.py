@@ -87,11 +87,9 @@ class FedProcess:
         train_log_dir = logdir / 'train'
         server_log_dir = logdir / 'server'
         selected_client_log_dir = logdir / 'client_selected'
-        if MTL == True:
-            all_client_log_dir = logdir / 'client_all'
-            self.all_client_summary_writer = \
-                tf.summary.create_file_writer(str(all_client_log_dir))
-
+        all_client_log_dir = logdir / 'client_all'
+        self.all_client_summary_writer = \
+            tf.summary.create_file_writer(str(all_client_log_dir))
         self.train_summary_writer = \
             tf.summary.create_file_writer(str(train_log_dir))
         self.server_summary_writer = \
@@ -105,6 +103,8 @@ class FedProcess:
             aggregated_deltas = self.aggregate_deltas_multi_layer(
                 deltas, [size / sum(train_size) for size in train_size])
             self.server.apply_delta(aggregated_deltas)
+
+            updated_clients = [False] * len(self.clients)
         else:
             self.build()
 
@@ -119,10 +119,8 @@ class FedProcess:
         all_client_test_losses = np.zeros(num_rounds)
         selected_client_test_losses = np.zeros(num_rounds)
         training_losses = np.zeros(num_rounds)
-
         overall_tensorboard = CustomTensorboard(log_dir=str(train_log_dir),
-                                                histogram_freq=max(0, verbose-2),
-                                                profile_batch=max(0, verbose-2))
+                                                histogram_freq=1, profile_batch=0)
         if verbose >= 2:
             if callbacks:
                 callbacks.append(overall_tensorboard)
@@ -136,10 +134,12 @@ class FedProcess:
             history_train = []
             for indx in clients_sampled:
                 self.clients[indx].receive_and_save_weights(self.server)
-                self.clients[indx].renew_center(round_i > 0)
+                self.clients[indx].renew_center()
 
                 if MTL:
-                    if self.fed_avg_init == 2 or (self.fed_avg_init and not self.clients[indx].s_i_to_update):
+                    if self.fed_avg_init == 2 or (
+                            self.fed_avg_init
+                            and not self.clients[indx].s_i_to_update):
                         print('initialize posterior with server')
                         self.clients[indx].initialize_kernel_posterior()
 
@@ -153,6 +153,8 @@ class FedProcess:
 
                 if MTL:
                     self.clients[indx].apply_damping(self.damping_factor)
+                    updated_clients[indx] = True
+                    self.clients[indx].s_i_to_update = True
 
                 delta = self.clients[indx].compute_delta()
                 deltas.append(delta)
@@ -219,13 +221,12 @@ class FedProcess:
             server_test = [self.server.evaluate(test_data, verbose=0)
                            for test_data in federated_test_data]
 
-            if MTL:
-                all_client_test = [self.clients[indx].evaluate(test_data, verbose=0)
-                                   for indx, test_data in enumerate(federated_test_data)]
-                all_client_avg_test = avg_dict_eval(
-                    all_client_test, [size / sum(test_size) for size in test_size])
-                all_client_test_accs[round_i] = all_client_avg_test[1]
-                all_client_test_losses[round_i] = all_client_avg_test[0]
+            all_client_test = [self.clients[indx].evaluate(test_data, verbose=0)
+                               for indx, test_data in enumerate(federated_test_data)]
+            all_client_avg_test = avg_dict_eval(
+                all_client_test, [size / sum(test_size) for size in test_size])
+            all_client_test_accs[round_i] = all_client_avg_test[1]
+            all_client_test_losses[round_i] = all_client_avg_test[0]
 
             avg_train = avg_dict(history_train,
                                  [train_size[client]
@@ -251,10 +252,8 @@ class FedProcess:
                             f"selected_client_test: {selected_client_test}, "
                             f"server_avg_test on whole test data: {server_avg_test} "
                             f"max accuracy so far: {max_accuracy} reached at "
-                            f"round {max_acc_round}")
-            if MTL:
-                debug_string = debug_string + (f"all clients avg test: {all_client_avg_test}, ")
-
+                            f"round {max_acc_round} "
+                            f"all clients avg test: {all_client_avg_test}")
             logger.debug(debug_string)
 
             if round_i % tensorboard_updates == 0:
@@ -265,9 +264,8 @@ class FedProcess:
                         tf.summary.scalar(key, server_avg_test[i], step=round_i)
                     with self.selected_client_summary_writer.as_default():
                         tf.summary.scalar(key, selected_client_test[key], step=round_i)
-                    if MTL:
-                        with self.all_client_summary_writer.as_default():
-                            tf.summary.scalar(key, all_client_avg_test[i], step=round_i)
+                    with self.all_client_summary_writer.as_default():
+                        tf.summary.scalar(key, all_client_avg_test[i], step=round_i)
                 with self.train_summary_writer.as_default():
                     tf.summary.scalar('max_sparse_categorical_accuracy',
                                       max_accuracy, step=round_i)
@@ -280,9 +278,8 @@ class FedProcess:
             np.save(logdir.parent / 'server_losses.npy', server_test_losses)
             np.save(logdir.parent / 'training_losses.npy', training_losses)
             np.save(logdir.parent / 'selected_client_losses.npy', selected_client_test_losses)
-            if MTL:
-                np.save(logdir.parent / 'all_client_accs.npy', all_client_test_accs)
-                np.save(logdir.parent / 'all_client_losses.npy', all_client_test_losses)
+            np.save(logdir.parent / 'all_client_accs.npy', all_client_test_accs)
+            np.save(logdir.parent / 'all_client_losses.npy', all_client_test_losses)
 
         for i, client in enumerate(self.clients):
             client.save_weights(str(logdir / f'weights_{i}.h5'))
