@@ -159,30 +159,42 @@ class FedProcess:
                 if verbose >= 1:
                     with self.train_summary_writer.as_default():
                         for layer in self.clients[indx].layers:
-                            for weight in layer.trainable_weights:
-                                if 'natural' in weight.name:
-                                    tf.summary.histogram(
-                                        layer.name + '/gamma',
-                                        weight[..., 0], step=round_i)
-                                    tf.summary.histogram(
-                                        layer.name + '/prec',
-                                        weight[..., 1], step=round_i)
+                            layer_to_check = layer
+                            if hasattr(layer, 'cell'):
+                                layer_to_check = layer.cell
+                            for weight in layer_to_check.trainable_weights:
+                                if 'natural' in weight.name + layer.name:
+                                    tf.summary.histogram(layer.name + '/' + weight.name + '_gamma',
+                                                         weight[..., 0], step=round_i)
+                                    tf.summary.histogram(layer.name + '/' + weight.name + '_prec',
+                                                         weight[..., 1], step=round_i)
                                 else:
-                                    tf.summary.histogram(
-                                        layer.name, weight, step=round_i)
-                            if hasattr(layer, 'kernel_posterior'):
+                                    tf.summary.histogram(layer.name + '/' + weight.name, weight, step=round_i)
+                            if hasattr(layer_to_check, 'kernel_posterior'):
                                 tf.summary.histogram(
-                                    layer.name + '/gamma_reparametrized',
-                                    layer.kernel_posterior.distribution.gamma,
+                                    layer.name + '/kernel_posterior' + '_gamma_reparametrized',
+                                    layer_to_check.kernel_posterior.distribution.gamma,
                                     step=round_i)
                                 tf.summary.histogram(
-                                    layer.name + '/prec_reparametrized',
-                                    layer.kernel_posterior.distribution.prec,
+                                    layer.name + '/kernel_posterior' + '_prec_reparametrized',
+                                    layer_to_check.kernel_posterior.distribution.prec,
+                                    step=round_i)
+                            if hasattr(layer_to_check, 'recurrent_kernel_posterior'):
+                                tf.summary.histogram(
+                                    layer.name + '/recurrent_kernel_posterior' + '_gamma_reparametrized',
+                                    layer_to_check.recurrent_kernel_posterior.distribution.gamma,
+                                    step=round_i)
+                                tf.summary.histogram(
+                                    layer.name + '/recurrent_kernel_posterior' + '_prec_reparametrized',
+                                    layer_to_check.recurrent_kernel_posterior.distribution.prec,
                                     step=round_i)
                         for layer in self.server.layers:
-                            if hasattr(layer, 'server_variable_dict'):
-                                for key, value in layer.server_variable_dict.items():
-                                    if 'natural' in layer.name:
+                            layer_to_check = layer
+                            if hasattr(layer, 'cell'):
+                                layer_to_check = layer.cell
+                            if hasattr(layer_to_check, 'server_variable_dict'):
+                                for key, value in layer_to_check.server_variable_dict.items():
+                                    if 'natural' in layer_to_check.name + value.name:
                                         tf.summary.histogram(
                                             layer.name + '/server_gamma',
                                             value[..., 0], step=round_i)

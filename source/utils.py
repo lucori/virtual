@@ -93,7 +93,10 @@ class CustomTensorboard(tf.keras.callbacks.TensorBoard):
              writer.as_default(), \
              summary_ops_v2.always_record_summaries():
             for layer in self.model.layers:
-                for weight in layer.trainable_weights:
+                layer_to_check = layer
+                if hasattr(layer, 'cell'):
+                    layer_to_check = layer.cell
+                for weight in layer_to_check.trainable_weights:
                     if 'natural' in weight.name + layer.name:
                         tf.summary.histogram(layer.name + '/' + weight.name + '_gamma',
                                              weight[..., 0], step=epoch)
@@ -101,11 +104,24 @@ class CustomTensorboard(tf.keras.callbacks.TensorBoard):
                                              weight[..., 1], step=epoch)
                     else:
                         tf.summary.histogram(layer.name + '/' + weight.name, weight, step=epoch)
-                if hasattr(layer, 'kernel_posterior'):
-                    tf.summary.histogram(layer.name + '/' + weight.name + '_gamma_reparametrized', layer.kernel_posterior.distribution.gamma,
-                                         step=epoch)
-                    tf.summary.histogram(layer.name + '/' + weight.name + '_prec_reparametrized', layer.kernel_posterior.distribution.prec,
-                                         step=epoch)
+                if hasattr(layer_to_check, 'recurrent_kernel_posterior'):
+                    tf.summary.histogram(
+                        layer.name + '/recurrent_kernel_posterior' + '_gamma_reparametrized',
+                        layer_to_check.recurrent_kernel_posterior.distribution.gamma,
+                        step=epoch)
+                    tf.summary.histogram(
+                        layer.name + '/recurrent_kernel_posterior' + '_prec_reparametrized',
+                        layer_to_check.recurrent_kernel_posterior.distribution.prec,
+                        step=epoch)
+                if hasattr(layer_to_check, 'kernel_posterior'):
+                    tf.summary.histogram(
+                        layer.name + '/kernel_posterior' + '_gamma_reparametrized',
+                        layer_to_check.kernel_posterior.distribution.gamma,
+                        step=epoch)
+                    tf.summary.histogram(
+                        layer.name + '/kernel_posterior' + '_prec_reparametrized',
+                        layer_to_check.kernel_posterior.distribution.prec,
+                        step=epoch)
             writer.flush()
 
     def on_epoch_end(self, epoch, logs=None):
