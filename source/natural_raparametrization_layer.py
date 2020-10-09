@@ -364,6 +364,11 @@ class Conv2DVirtualNatural(tfp.layers.Convolution2DReparameterization,
             self.untransformed_scale_initializer = \
                 kwargs.pop('untransformed_scale_initializer')
 
+        self.loc_initializer = None
+        if 'loc_initializer' in kwargs:
+            self.loc_initializer = \
+                kwargs.pop('loc_initializer')
+
         if kernel_posterior_fn is None:
             kernel_posterior_fn = self.renormalize_natural_mean_field_normal_fn
         if kernel_prior_fn is None:
