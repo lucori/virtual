@@ -719,8 +719,10 @@ class LSTMCellVariationalNatural(tf.keras.layers.LSTMCell, VariationalReparametr
                  activation='tanh',
                  recurrent_activation='hard_sigmoid',
                  use_bias=True,
-                 kernel_initializer='glorot_uniform',
-                 recurrent_initializer='orthogonal',
+                 kernel_initializer=tf.keras.initializers.VarianceScaling(scale=30.0,
+                                                                          mode='fan_avg',
+                                                                          distribution='uniform',),
+                 recurrent_initializer=tf.keras.initializers.Orthogonal(gain=7.0),
                  bias_initializer='zeros',
                  unit_forget_bias=True,
                  kernel_constraint=None,
@@ -745,10 +747,7 @@ class LSTMCellVariationalNatural(tf.keras.layers.LSTMCell, VariationalReparametr
                  client_weight=1.,
                  **kwargs):
 
-        self.untransformed_scale_initializer = None
-        if 'untransformed_scale_initializer' in kwargs:
-            self.untransformed_scale_initializer = \
-                kwargs.pop('untransformed_scale_initializer')
+        self.untransformed_scale_initializer = kwargs.pop('untransformed_scale_initializer', None)
 
         if kernel_posterior_fn is None:
             kernel_posterior_fn = self.renormalize_natural_mean_field_normal_fn

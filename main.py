@@ -47,18 +47,22 @@ def _setup_logger(results_path, create_stdlog):
 def create_hparams(hp_conf, data_set_conf, training_conf,
                    model_conf, logdir):
     exp_wide_keys = ["learning_rate", "l2_reg", "kl_weight", "batch_size",
-                     "epochs_per_round", "hierarchical", "prior_scale"]
+                     "epochs_per_round", "hierarchical", "prior_scale", "natural_lr",
+                     "server_learning_rate", "damping_factor"]
     HP_DICT = {}
     for key_0 in list(hp_conf.keys()) + exp_wide_keys:
         if (key_0 == 'learning_rate'
                 or key_0 == 'kl_weight'
-                or key_0 == 'l2_reg'):
-            HP_DICT[key_0] = hp.HParam(key_0, hp.RealInterval(0.0, 1.0))
+                or key_0 == 'l2_reg'
+                or key_0 == 'server_learning_rate'
+                or key_0 == 'natural_lr'
+                or key_0 == 'damping_factor'):
+            HP_DICT[key_0] = hp.HParam(key_0, hp.RealInterval(0.0, 1e20))
         elif key_0 == 'batch_size':
             HP_DICT[key_0] = hp.HParam(key_0, hp.Discrete([1, 5, 10, 20, 40, 50,
                                                            64, 128, 256, 512]))
         elif key_0 == 'epochs_per_round':
-            HP_DICT[key_0] = hp.HParam(key_0, hp.Discrete([1, 5, 10, 15, 20,
+            HP_DICT[key_0] = hp.HParam(key_0, hp.Discrete([1, 2, 5, 10, 15, 20,
                                                            25, 30, 35, 40,
                                                            45, 50, 55, 60,
                                                            65, 70, 75, 80,
@@ -95,11 +99,27 @@ def create_hparams(hp_conf, data_set_conf, training_conf,
     HP_DICT['training_num_rounds'] = hp.HParam('num_rounds',
                                                hp.RealInterval(0.0, 1e10))
 
-    metrics = [hp.Metric('sparse_categorical_accuracy',
-                         display_name='Accuracy'),
-               hp.Metric('max_sparse_categorical_accuracy',
-                         display_name='Max Accuracy')]
-    with tf.summary.create_file_writer(str(logdir/'train')).as_default():
+    metrics = [hp.Metric('train/sparse_categorical_accuracy',
+                         display_name='train_accuracy'),
+               hp.Metric('train/max_sparse_categorical_accuracy',
+                         display_name='train_max_accuracy'),
+               hp.Metric('client_all/sparse_categorical_accuracy',
+                         display_name='client_all_accuracy'),
+               hp.Metric('client_all/max_sparse_categorical_accuracy',
+                         display_name='max_client_all_accuracy'),
+               hp.Metric('server/sparse_categorical_accuracy',
+                         display_name='server_accuracy'),
+               hp.Metric('server/max_sparse_categorical_accuracy',
+                         display_name='max_server_accuracy'),
+               hp.Metric('client_selected/sparse_categorical_accuracy',
+                         display_name='client_selected_accuracy'),
+               hp.Metric('client_selected/max_sparse_categorical_accuracy',
+                         display_name='max_client_selected_max_accuracy')
+               ]
+
+    print('create_hp_fun ' + str(logdir))
+
+    with tf.summary.create_file_writer(str(logdir)).as_default():
         hp.hparams_config(hparams=HP_DICT.values(),
                           metrics=metrics)
     return HP_DICT
@@ -132,7 +152,9 @@ def write_hparams(hp_dict, session_num, exp_conf, data_set_conf,
         layers = layers + layer['name'] + '_'
     hparams[hp_dict['model_layers']] = layers[:-1]
 
-    with tf.summary.create_file_writer(str(logdir_run/'train')).as_default():
+    print('write_hp_fun ' + str(logdir_run))
+
+    with tf.summary.create_file_writer(str(logdir_run)).as_default():
         hp.hparams(hparams)
 
 

@@ -83,7 +83,8 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                          or issubclass(layer_class, DenseSharedNatural)
                          or layer_class == Conv2DVirtual
                          or layer_class == Conv2DVirtualNatural
-                         or layer_class == NaturalGaussianEmbedding)):
+                         or layer_class == NaturalGaussianEmbedding
+                         or layer_class == LSTMCellVariationalNatural)):
                 scale_init = dict_conf['scale_init']
                 untransformed_scale = scale_init[0]
                 if scale_init[0] == 'auto':
@@ -380,7 +381,6 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                 {'class_name': dict_conf['optimizer'],
                  'config': {'learning_rate': lr_schedule}})
 
-        model.summary()
         if dict_conf['optimizer'] == 'sgd':
             LR_mult_dict = {}
             for layer in model.layers:
