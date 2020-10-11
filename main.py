@@ -261,8 +261,10 @@ def run_experiments(configs, root_path, data_dir=None, use_scratch=False):
 
         if 'damping_factor' not in all_params and all_params['method'] == 'virtual':
             all_params['damping_factor'] = 1-all_params['server_learning_rate']
-        hp_conf['damping_factor'] = all_params['damping_factor']
-        exp_conf['damping_factor'] = all_params['damping_factor']
+            hp_conf['damping_factor'] = all_params['damping_factor']
+            exp_conf['damping_factor'] = all_params['damping_factor']
+
+        print(all_params)
         # Log configurations
         logdir_run = logdir / f'{session_num}_{current_time}'
         logger.info(f"saving results in {logdir_run}")
