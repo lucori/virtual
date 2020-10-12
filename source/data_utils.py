@@ -2,7 +2,6 @@ import os
 import logging
 from pathlib import Path
 import zipfile
-
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -10,6 +9,7 @@ import tensorflow as tf
 import tensorflow_federated as tff
 from tensorflow_federated.python.simulation import hdf5_client_data
 from source.constants import ROOT_LOGGER_STR
+from source.utils import softmax
 
 logger = logging.getLogger(ROOT_LOGGER_STR + '.' + __name__)
 
@@ -28,10 +28,10 @@ def federated_dataset(dataset_conf, data_dir=Path('data')):
     num_clients = dataset_conf['num_clients']
     if name == 'mnist':
         x_train, y_train, x_test, y_test = mnist_preprocess(data_dir)
-        x_train = np.split(x_train, num_clients)
-        y_train = np.split(y_train, num_clients)
-        x_test = np.split(x_test, num_clients)
-        y_test = np.split(y_test, num_clients)
+        x_train = np.split(x_train, 100)
+        y_train = np.split(y_train, 100)
+        x_test = np.split(x_test, 100)
+        y_test = np.split(y_test, 100)
 
         federated_train_data = post_process_datasets([tf.data.Dataset.from_tensor_slices(data)
                                                       for data in zip(x_train, y_train)])
@@ -39,6 +39,11 @@ def federated_dataset(dataset_conf, data_dir=Path('data')):
                                                      for data in zip(x_test, y_test)])
         train_size = [x.shape[0] for x in x_train]
         test_size = [x.shape[0] for x in x_test]
+
+        federated_train_data = federated_train_data[0:num_clients]
+        federated_test_data = federated_test_data[0:num_clients]
+        train_size = train_size[0:num_clients]
+        test_size = test_size[0:num_clients]
 
     if name == 'femnist':
         if (data_dir
@@ -85,29 +90,55 @@ def federated_dataset(dataset_conf, data_dir=Path('data')):
 
     if name == 'pmnist':
         federated_train_data, federated_test_data = permuted_mnist(
-            num_clients=num_clients)
+            num_clients=100)
         train_size = [data[0].shape[0] for data in federated_train_data]
         test_size = [data[0].shape[0] for data in federated_test_data]
-        federated_train_data = [tf.data.Dataset.from_tensor_slices(data)
-                                for data in federated_train_data]
-        federated_test_data = [tf.data.Dataset.from_tensor_slices(data)
-                               for data in federated_test_data]
+        federated_train_data = post_process_datasets([tf.data.Dataset.from_tensor_slices(data)
+                                                      for data in federated_train_data])
+        federated_test_data = post_process_datasets([tf.data.Dataset.from_tensor_slices(data)
+                                                     for data in federated_test_data])
+        federated_train_data = federated_train_data[0:num_clients]
+        federated_test_data = federated_test_data[0:num_clients]
+        train_size = train_size[0:num_clients]
+        test_size = test_size[0:num_clients]
 
     if name == 'human_activity':
         x, y = human_activity_preprocess(data_dir)
         x, y, x_t, y_t = data_split(x, y)
         train_size = [xs.shape[0] for xs in x]
         test_size = [xs.shape[0] for xs in x_t]
-        federated_train_data = [tf.data.Dataset.from_tensor_slices(data) for data in zip(x, y)]
-        federated_test_data = [tf.data.Dataset.from_tensor_slices(data) for data in zip(x_t, y_t)]
+        federated_train_data = post_process_datasets([tf.data.Dataset.from_tensor_slices(data) for data in zip(x, y)])
+        federated_test_data = post_process_datasets([tf.data.Dataset.from_tensor_slices(data) for data in zip(x_t, y_t)])
+
+        federated_train_data = federated_train_data[0:num_clients]
+        federated_test_data = federated_test_data[0:num_clients]
+        train_size = train_size[0:num_clients]
+        test_size = test_size[0:num_clients]
 
     if name == 'vehicle_sensor':
         x, y = vehicle_sensor_preprocess(data_dir)
         x, y, x_t, y_t = data_split(x, y)
         train_size = [xs.shape[0] for xs in x]
         test_size = [xs.shape[0] for xs in x_t]
-        federated_train_data = [tf.data.Dataset.from_tensor_slices(data) for data in zip(x, y)]
-        federated_test_data = [tf.data.Dataset.from_tensor_slices(data) for data in zip(x_t, y_t)]
+        federated_train_data = post_process_datasets([tf.data.Dataset.from_tensor_slices(data) for data in zip(x, y)])
+        federated_test_data = post_process_datasets([tf.data.Dataset.from_tensor_slices(data) for data in zip(x_t, y_t)])
+
+        federated_train_data = federated_train_data[0:num_clients]
+        federated_test_data = federated_test_data[0:num_clients]
+        train_size = train_size[0:num_clients]
+        test_size = test_size[0:num_clients]
+
+    if name == 'synthetic':
+        x, y = synthetic(num_clients=num_clients, num_class=10, dimension=60,
+                         alpha=dataset_conf['synth_alpha'],
+                         beta=dataset_conf['synth_beta'],
+                         iid=dataset_conf['iid'])
+        x, y, x_t, y_t = data_split(x, y)
+        train_size = [xs.shape[0] for xs in x]
+        test_size = [xs.shape[0] for xs in x_t]
+        federated_train_data = post_process_datasets([tf.data.Dataset.from_tensor_slices(data) for data in zip(x, y)])
+        federated_test_data = post_process_datasets(
+            [tf.data.Dataset.from_tensor_slices(data) for data in zip(x_t, y_t)])
 
     return federated_train_data, federated_test_data, train_size, test_size
 
@@ -243,13 +274,12 @@ def human_activity_preprocess(data_dir=None):
 # It's important that the following link does not remove the zip file.
 # Otherwise the enxt time data will be downloaded again.
 def vehicle_sensor_preprocess(data_dir=None):
-    if not data_dir:
+    if not data_dir or 'vehicle_sensor' not in str(data_dir):
         data_dir = Path(__file__).parent.absolute().parent
         data_dir = data_dir / 'data' / 'vehicle_sensor'
 
         if not data_dir.exists():
             data_dir.mkdir(parents=True)
-
     subdirs = [f for f in data_dir.iterdir() if f.is_file()]
     if not subdirs:
         url = 'http://www.ecs.umass.edu/~mduarte/images/event.zip'
@@ -288,6 +318,58 @@ def vehicle_sensor_preprocess(data_dir=None):
     x = np.split(x, split_index)
     y = np.split(y, split_index)
     return x, y
+
+
+def synthetic(num_clients=30, num_class=10, dimension=60, alpha=0., beta=0., iid=False):
+    np.random.seed(0)
+    samples_per_user = np.random.lognormal(4, 2, (num_clients)).astype(int) + 50
+    print(samples_per_user)
+    num_samples = np.sum(samples_per_user)
+
+    X_split = [[] for _ in range(num_clients)]
+    y_split = [[] for _ in range(num_clients)]
+
+    #### define some eprior ####
+    mean_W = np.random.normal(0, alpha, num_clients)
+    mean_b = mean_W
+    B = np.random.normal(0, beta, num_clients)
+    mean_x = np.zeros((num_clients, dimension))
+
+    diagonal = np.zeros(dimension)
+    for j in range(dimension):
+        diagonal[j] = np.power((j + 1), -1.2)
+    cov_x = np.diag(diagonal)
+
+    for i in range(num_clients):
+        if iid == 1:
+            mean_x[i] = np.ones(dimension) * B[i]  # all zeros
+        else:
+            mean_x[i] = np.random.normal(B[i], 1, dimension)
+        print(mean_x[i])
+
+    if iid == 1:
+        W_global = np.random.normal(0, 1, (dimension, num_class))
+        b_global = np.random.normal(0, 1, num_class)
+
+    for i in range(num_clients):
+        W = np.random.normal(mean_W[i], 1, (dimension, num_class))
+        b = np.random.normal(mean_b[i], 1, num_class)
+        if iid == 1:
+            W = W_global
+            b = b_global
+
+        xx = np.random.multivariate_normal(mean_x[i], cov_x, samples_per_user[i])
+        yy = np.zeros(samples_per_user[i])
+
+        for j in range(samples_per_user[i]):
+            tmp = np.dot(xx[j], W) + b
+            yy[j] = np.argmax(softmax(tmp))
+
+        X_split[i] = xx
+        y_split[i] = yy
+        print("{}-th users has {} exampls".format(i, len(y_split[i])))
+
+    return X_split, y_split
 
 
 def shakspeare(num_clients=-1, seq_lenght=80, data_dir=None):

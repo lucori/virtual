@@ -136,3 +136,9 @@ class CustomTensorboard(tf.keras.callbacks.TensorBoard):
 
         if self.embeddings_freq and epoch % self.embeddings_freq == 0:
             self._log_embeddings(epoch)
+
+
+def softmax(x):
+    ex = np.exp(x)
+    sum_ex = np.sum(np.exp(x))
+    return ex / sum_ex
