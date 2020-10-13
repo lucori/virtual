@@ -93,6 +93,17 @@ def federated_dataset(dataset_conf, data_dir=Path('data')):
             num_clients=100, data_dir=data_dir)
         train_size = [data[0].shape[0] for data in federated_train_data]
         test_size = [data[0].shape[0] for data in federated_test_data]
+
+        if 'shape' in dataset_conf:
+            def preprocess(dataset):
+                return dataset.reshape(dataset_conf['shape'])
+            federated_train_data = [(np.array(
+                list(map(preprocess, client[0]))), client[1])
+                             for client in federated_train_data]
+            federated_test_data = [(np.array(
+                list(map(preprocess, client[0]))), client[1])
+                for client in federated_test_data]
+
         federated_train_data = post_process_datasets([tf.data.Dataset.from_tensor_slices(data)
                                                       for data in federated_train_data])
         federated_test_data = post_process_datasets([tf.data.Dataset.from_tensor_slices(data)

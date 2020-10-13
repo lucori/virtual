@@ -1,6 +1,7 @@
 {
     "session":{
-        "num_gpus": 1
+        "num_gpus": 1,
+        "verbose": 0
     },
     "data_set_conf":{
         "name": "femnist",
@@ -14,33 +15,36 @@
    "model_conf": {
               "layers": [{
                 "input_shape": [784],
-                "name": "DenseReparametrizationShared",
+                "name": "DenseReparametrizationNaturalShared",
                 "units": 100,
                 "activation": "relu",
                 "bias_posterior_fn": null
               },
                 {
-                "name": "DenseReparametrizationShared",
+                "name": "DenseReparametrizationNaturalShared",
                 "units": 100,
                 "activation": "relu",
                 "bias_posterior_fn": null
               },
                 {
-                "name": "DenseReparametrizationShared",
+                "name": "DenseReparametrizationNaturalShared",
                 "units": 10,
                 "activation": "softmax",
                 "bias_posterior_fn": null
               }],
               "prior_scale": 1.0
    },
-   "hp": {"epochs_per_round": [1],
+   "hp": {"epochs_per_round": [1000],
+          "natural_lr": [800000000.0],
           "kl_weight": [0.0000001],
           "batch_size": [20],
           "hierarchical": [false],
-          "clients_per_round": [10],
-          "learning_rate": [0.01],
+          "clients_per_round": [1],
+          "learning_rate": [0.001],
           "optimizer": ["sgd"],
-          "scale_init": [[-5, 0.1]],
-          "damping_factor": [0.4]
+          "scale_init": [[-4.85, 0.45]],
+           "loc_init": [[0,0.5]],
+          "damping_factor": [1],
+           "server_learning_rate": [1]
    }
 }

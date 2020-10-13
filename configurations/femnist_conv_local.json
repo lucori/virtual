@@ -8,33 +8,30 @@
         "num_clients": 100,
         "shape": [1, 28, 28]
     },
-    "training_conf": {"method": "virtual",
+    "training_conf": {"method": "fedprox",
                      "tot_epochs_per_client": 10000,
-                     "batch_size": 20,
+                     "clients_per_round": 10,
                      "optimizer": "sgd",
-                     "fed_avg_init": false,
                      "tensorboard_updates": 1
     },
-   "model_conf": {"layers": [{"name": "Conv2DVirtualNatural",
+   "model_conf": {"layers": [{"name": "Conv2D",
                               "input_shape": [1, 28, 28],
                               "filters": 32,
                               "kernel_size": 5,
                               "padding": "SAME",
-                              "activation": "relu",
-                              "bias_posterior_fn": null
+                              "activation": "relu"
                             },
                               { "name": "MaxPooling2D",
                               "pool_size": [2, 2],
                               "strides": [2, 2],
                               "padding": "SAME"
                               },
-                              {"name": "Conv2DVirtualNatural",
+                              {"name": "Conv2D",
                               "input_shape": [1, 28, 28],
                               "filters": 64,
                               "kernel_size": 5,
                               "padding": "SAME",
-                              "activation": "relu",
-                                "bias_posterior_fn": null
+                              "activation": "relu"
                             },
                             { "name": "MaxPooling2D",
                               "pool_size": [2, 2],
@@ -43,34 +40,26 @@
                               },
                             { "name": "Flatten"
                             },
-                            { "name": "DenseReparametrizationNaturalShared",
+                            { "name": "Dense",
                               "units": 100,
-                              "activation": "relu",
-                              "bias_posterior_fn": null
+                              "activation": "relu"
                             },
-                            { "name": "DenseReparametrizationNaturalShared",
+                            { "name": "Dense",
                               "units": 100,
-                              "activation": "relu",
-                              "bias_posterior_fn": null
+                              "activation": "relu"
                             },
-                            { "name": "DenseReparametrizationNaturalShared",
+                            { "name": "Dense",
                               "units": 10,
-                              "activation": "softmax",
-                              "bias_posterior_fn": null
+                              "activation": "softmax"
                             }
-                            ],
-                  "prior_scale": 1.0
+                            ]
    },
-   "hp": {
-          "learning_rate": [0.0001],
-          "natural_lr": [1000000000.0],
-          "kl_weight": [0.000000001],
-          "hierarchical": [false],
-          "scale_init": [[-4.45, 0.85]],
-          "loc_init": [[0, 0.65]],
-          "server_learning_rate": [0.9],
-          "damping_factor": [0.1],
-          "clients_per_round": [10],
-          "epochs_per_round": [100]
+   "hp": {"epochs_per_round": [1],
+         "learning_rate": [0.006, 0.008, 0.03, 0.06, 0.08,
+         0.1, 0.01, 0.001, 0.0001, 0.00001],
+         "batch_size": [20],
+         "l2_reg": [0.0],
+         "damping_factor": [1],
+         "server_learning_rate": [1]
    }
 }
