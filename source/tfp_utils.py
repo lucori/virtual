@@ -161,3 +161,15 @@ class LocPrecTuple(tuple):
     def assign(self, loc_prec_tuple):
         self[0].assign(loc_prec_tuple[0])
         self[1].variables[0].assign(precision_from_untransformed_scale.inverse(loc_prec_tuple[1]))
+
+
+def sparse_delta_function(percentile):
+
+    def sparse_subtract(n1, n2):
+        #abs_snr = tf.abs(n1[..., 0] / tf.sqrt(n1[..., 1]))
+        abs_snr = tf.abs(n1[..., 0] - n2[..., 0]) / tf.sqrt(tf.abs(n1[..., 1]))
+        condition = abs_snr >= tfp.stats.percentile(abs_snr, percentile)
+        sparse_delta = tf.where(tf.expand_dims(condition, -1), n1-n2, 0.)
+        return sparse_delta
+
+    return sparse_subtract

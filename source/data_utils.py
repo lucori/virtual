@@ -90,7 +90,7 @@ def federated_dataset(dataset_conf, data_dir=Path('data')):
 
     if name == 'pmnist':
         federated_train_data, federated_test_data = permuted_mnist(
-            num_clients=100)
+            num_clients=100, data_dir=data_dir)
         train_size = [data[0].shape[0] for data in federated_train_data]
         test_size = [data[0].shape[0] for data in federated_test_data]
         federated_train_data = post_process_datasets([tf.data.Dataset.from_tensor_slices(data)
@@ -149,11 +149,12 @@ def data_split(x, y, test_size=0.25):
 
 
 def mnist_preprocess(data_dir=None):
+    print(data_dir)
     if data_dir and (data_dir / 'datasets' / 'mnist.npz').is_file():
         file_path = data_dir / 'datasets' / 'mnist.npz'
 
         logger.debug(f"Data already exists, loading from {data_dir}")
-        with np.load(file_path  , allow_pickle=True) as f:
+        with np.load(file_path, allow_pickle=True) as f:
             x_train, y_train = f['x_train'], f['y_train']
             x_test, y_test = f['x_test'], f['y_test']
     else:
@@ -188,8 +189,8 @@ def permute(x):
     return permuted
 
 
-def permuted_mnist(num_clients=100):
-    x_train, y_train, x_test, y_test = mnist_preprocess()
+def permuted_mnist(num_clients=100, data_dir=None):
+    x_train, y_train, x_test, y_test = mnist_preprocess(data_dir=data_dir)
     x_train = np.split(x_train, num_clients)
     y_train = np.split(y_train, num_clients)
     x_test = np.split(x_test, num_clients)

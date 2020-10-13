@@ -56,7 +56,8 @@ def create_hparams(hp_conf, data_set_conf, training_conf,
                 or key_0 == 'l2_reg'
                 or key_0 == 'server_learning_rate'
                 or key_0 == 'natural_lr'
-                or key_0 == 'damping_factor'):
+                or key_0 == 'damping_factor'
+                or key_0 == 'delta_percentile'):
             HP_DICT[key_0] = hp.HParam(key_0, hp.RealInterval(0.0, 1e20))
         elif key_0 == 'batch_size':
             HP_DICT[key_0] = hp.HParam(key_0, hp.Discrete([1, 5, 10, 20, 40, 50,

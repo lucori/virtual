@@ -115,6 +115,7 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
             if issubclass(layer_class, DenseSharedNatural):
                 layer_params['kernel_divergence_fn'] = kernel_divergence_fn
                 layer_params['client_weight'] = client_weight
+                layer_params['delta_percentile'] = dict_conf.get('delta_percentile', None)
             if layer_class == Conv2DVirtual:
                 layer_params['kernel_divergence_fn'] = kernel_divergence_fn
                 layer_params['num_clients'] = dict_conf['num_clients']

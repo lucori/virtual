@@ -4,7 +4,7 @@ from tensorflow_probability.python import distributions as tfd
 from tensorflow_probability.python.layers import util as tfp_layers_util
 from tensorflow.python.layers import utils as tf_layers_util
 from source.centered_layers import LayerCentered
-from source.tfp_utils import precision_from_untransformed_scale
+from source.tfp_utils import precision_from_untransformed_scale, sparse_delta_function
 from source.normal_natural import NormalNatural, eps
 from tensorflow.python.keras.constraints import Constraint
 from tensorflow.python.keras import backend as K
@@ -159,6 +159,8 @@ class DenseSharedNatural(VariationalReparametrizedNatural):
             self.loc_initializer = \
                 kwargs.pop('loc_initializer')
 
+        self.delta_percentile = kwargs.pop('delta_percentile', None)
+
         if kernel_posterior_fn is None:
             kernel_posterior_fn = self.renormalize_natural_mean_field_normal_fn
         if kernel_prior_fn is None:
@@ -181,6 +183,9 @@ class DenseSharedNatural(VariationalReparametrizedNatural):
 
         self.client_weight = client_weight
         self.delta_function = tf.subtract
+        if self.delta_percentile and not activation == 'softmax':
+            self.delta_function = sparse_delta_function(self.delta_percentile)
+            print(self, activation, 'using delta sparisfication')
         self.apply_delta_function = tf.add
         self.client_variable_dict = {}
         self.client_center_variable_dict = {}
