@@ -334,8 +334,8 @@ def natural_prior_initializer_fn():
     return natural_initializer
 
 
-class Conv2DVirtualNatural(tfp.layers.Convolution2DReparameterization,
-                    VariationalReparametrizedNatural):
+class Conv2DVirtualNatural(VariationalReparametrizedNatural,
+                           tfp.layers.Convolution2DReparameterization):
 
     def __init__(
             self,

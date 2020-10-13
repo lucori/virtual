@@ -4,7 +4,7 @@
         "verbose": 0
     },
     "data_set_conf":{
-        "name": "femnist",
+        "name": "pmnist",
         "num_clients": 100,
         "shape": [1, 28, 28]
     },
