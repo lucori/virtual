@@ -64,7 +64,7 @@
    "hp": {
           "learning_rate": [0.0001],
           "natural_lr": [1000000000.0],
-          "kl_weight": [0.0],
+          "kl_weight": [0.000000001],
           "hierarchical": [false],
           "scale_init": [[-4.45, 0.85]],
           "loc_init": [[0, 0.65]],
