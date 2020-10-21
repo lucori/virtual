@@ -6,7 +6,8 @@ from tensorflow.python.framework import tensor_shape
 class Gate(tf.keras.layers.Layer):
 
     def __init__(self,
-                 initializer=tf.keras.initializers.RandomUniform(minval=0, maxval=0.1),
+                 initializer=tf.keras.initializers.RandomUniform(
+                     minval=0, maxval=0.1),
                  **kwargs):
         if 'input_shape' not in kwargs and 'input_dim' in kwargs:
             kwargs['input_shape'] = (kwargs.pop('input_dim'),)

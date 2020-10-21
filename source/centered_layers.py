@@ -35,24 +35,28 @@ class LayerCentered:
     def compute_delta(self):
         delta_dict = {}
         for key in self.client_variable_dict.keys():
-            delta_dict[key] = (self.delta_function(self.client_variable_dict[key],
-                                                   self.client_center_variable_dict[key]))
+            delta_dict[key] = (
+                self.delta_function(self.client_variable_dict[key],
+                                    self.client_center_variable_dict[key]))
         return delta_dict
 
     def renew_center(self, center_to_updated=True):
         if 'natural' in self.name or center_to_updated:
             for key in self.client_center_variable_dict.keys():
-                self.client_center_variable_dict[key].assign(self.client_variable_dict[key])
+                self.client_center_variable_dict[key].assign(
+                    self.client_variable_dict[key])
 
     def apply_delta(self, delta):
         for key in self.server_variable_dict.keys():
-            add = self.apply_delta_function(self.server_variable_dict[key], delta[key])
+            add = self.apply_delta_function(
+                self.server_variable_dict[key], delta[key])
             self.server_variable_dict[key].assign(add)
             self.client_variable_dict[key].assign(add)
 
     def receive_and_save_weights(self, layer_server):
         for key in self.server_variable_dict.keys():
-            self.server_variable_dict[key].assign(layer_server.server_variable_dict[key])
+            self.server_variable_dict[key].assign(
+                layer_server.server_variable_dict[key])
 
 
 class DenseCentered(tf.keras.layers.Dense, LayerCentered):
@@ -72,17 +76,18 @@ class DenseCentered(tf.keras.layers.Dense, LayerCentered):
         if 'input_shape' not in kwargs and 'input_dim' in kwargs:
             kwargs['input_shape'] = (kwargs.pop('input_dim'),)
 
-        super(DenseCentered, self).__init__(units,
-                                            activation=activation,
-                                            use_bias=use_bias,
-                                            kernel_initializer=kernel_initializer,
-                                            bias_initializer=bias_initializer,
-                                            kernel_regularizer=None,
-                                            bias_regularizer=None,
-                                            activity_regularizer=activity_regularizer,
-                                            kernel_constraint=kernel_constraint,
-                                            bias_constraint=bias_constraint,
-                                            **kwargs)
+        super(DenseCentered, self).__init__(
+            units,
+            activation=activation,
+            use_bias=use_bias,
+            kernel_initializer=kernel_initializer,
+            bias_initializer=bias_initializer,
+            kernel_regularizer=None,
+            bias_regularizer=None,
+            activity_regularizer=activity_regularizer,
+            kernel_constraint=kernel_constraint,
+            bias_constraint=bias_constraint,
+            **kwargs)
 
         self.kernel_regularizer = kernel_regularizer()
         self.bias_regularizer = bias_regularizer()
@@ -95,20 +100,22 @@ class DenseCentered(tf.keras.layers.Dense, LayerCentered):
     def build(self, input_shape):
         dtype = dtypes.as_dtype(self.dtype or K.floatx())
         if not (dtype.is_floating or dtype.is_complex):
-            raise TypeError('Unable to build `Dense` layer with non-floating point '
-                      'dtype %s' % (dtype,))
+            raise TypeError(
+                'Unable to build `Dense` layer with non-floating point '
+                'dtype %s' % (dtype,))
         input_shape = tensor_shape.TensorShape(input_shape)
         if tensor_shape.dimension_value(input_shape[-1]) is None:
             raise ValueError('The last dimension of the inputs to `Dense` '
-                       'should be defined. Found `None`.')
+                             'should be defined. Found `None`.')
         last_dim = tensor_shape.dimension_value(input_shape[-1])
         self.input_spec = InputSpec(min_ndim=2,
                                     axes={-1: last_dim})
-        self.kernel_regularizer.center = self.add_weight('kernel_center',
-                                                         shape=[last_dim, self.units],
-                                                         initializer=tf.keras.initializers.constant(0.),
-                                                         dtype=self.dtype,
-                                                         trainable=False)
+        self.kernel_regularizer.center = self.add_weight(
+            'kernel_center',
+            shape=[last_dim, self.units],
+            initializer=tf.keras.initializers.constant(0.),
+            dtype=self.dtype,
+            trainable=False)
         self.kernel = self.add_weight('kernel',
                                       shape=[last_dim, self.units],
                                       initializer=self.kernel_initializer,
@@ -117,11 +124,13 @@ class DenseCentered(tf.keras.layers.Dense, LayerCentered):
                                       dtype=self.dtype,
                                       trainable=True)
         if self.use_bias:
-            self.bias_regularizer.center = self.add_weight('bias_center',
-                                                           shape=[self.units, ],
-                                                           initializer=tf.keras.initializers.constant(0.),
-                                                           dtype=self.dtype,
-                                                           trainable=False)
+            self.bias_regularizer.center = self.add_weight(
+                'bias_center',
+                shape=[self.units, ],
+                initializer=tf.keras.initializers.constant(0.),
+                dtype=self.dtype,
+                trainable=False)
+
             self.bias = self.add_weight('bias',
                                         shape=[self.units, ],
                                         initializer=self.bias_initializer,
@@ -134,12 +143,14 @@ class DenseCentered(tf.keras.layers.Dense, LayerCentered):
 
         self.client_variable_dict['kernel'] = self.kernel
         self.server_variable_dict['kernel'] = self.kernel
-        self.client_center_variable_dict['kernel'] = self.kernel_regularizer.center
+        self.client_center_variable_dict['kernel'] = \
+            self.kernel_regularizer.center
 
         if self.use_bias:
             self.client_variable_dict['bias'] = self.bias
             self.server_variable_dict['bias'] = self.bias
-            self.client_center_variable_dict['bias'] = self.bias_regularizer.center
+            self.client_center_variable_dict['bias'] = \
+                self.bias_regularizer.center
 
         self.built = True
 
@@ -165,24 +176,26 @@ class LSTMCellCentered(tf.keras.layers.LSTMCell, LayerCentered):
                  recurrent_dropout=0.,
                  implementation=1,
                  **kwargs):
-        super(LSTMCellCentered, self).__init__(units,
-                                               activation=activation,
-                                               recurrent_activation=recurrent_activation,
-                                               use_bias=use_bias,
-                                               kernel_initializer=kernel_initializer,
-                                               recurrent_initializer=recurrent_initializer,
-                                               bias_initializer=bias_initializer,
-                                               unit_forget_bias=unit_forget_bias,
-                                               kernel_regularizer=None,
-                                               recurrent_regularizer=None,
-                                               bias_regularizer=None,
-                                               kernel_constraint=kernel_constraint,
-                                               recurrent_constraint=recurrent_constraint,
-                                               bias_constraint=bias_constraint,
-                                               dropout=dropout,
-                                               recurrent_dropout=recurrent_dropout,
-                                               implementation=implementation,
-                                               **kwargs)
+        super(LSTMCellCentered, self).__init__(
+            units,
+            activation=activation,
+            recurrent_activation=recurrent_activation,
+            use_bias=use_bias,
+            kernel_initializer=kernel_initializer,
+            recurrent_initializer=recurrent_initializer,
+            bias_initializer=bias_initializer,
+            unit_forget_bias=unit_forget_bias,
+            kernel_regularizer=None,
+            recurrent_regularizer=None,
+            bias_regularizer=None,
+            kernel_constraint=kernel_constraint,
+            recurrent_constraint=recurrent_constraint,
+            bias_constraint=bias_constraint,
+            dropout=dropout,
+            recurrent_dropout=recurrent_dropout,
+            implementation=implementation,
+            **kwargs)
+
         self.kernel_regularizer = kernel_regularizer()
         self.recurrent_regularizer = recurrent_regularizer()
         self.bias_regularizer = bias_regularizer()
@@ -196,16 +209,20 @@ class LSTMCellCentered(tf.keras.layers.LSTMCell, LayerCentered):
     def build(self, input_shape):
         default_caching_device = _caching_device(self)
         input_dim = input_shape[-1]
-        self.kernel_regularizer.center = self.add_weight('kernel_center',
-                                                         shape=(input_dim, self.units * 4),
-                                                         initializer=tf.keras.initializers.constant(0.),
-                                                         dtype=self.dtype,
-                                                         trainable=False)
-        self.recurrent_regularizer.center = self.add_weight('recurrent_kernel_center',
-                                                         shape=(self.units, self.units * 4),
-                                                         initializer=tf.keras.initializers.constant(0.),
-                                                         dtype=self.dtype,
-                                                         trainable=False)
+        self.kernel_regularizer.center = self.add_weight(
+            'kernel_center',
+            shape=(input_dim, self.units * 4),
+            initializer=tf.keras.initializers.constant(0.),
+            dtype=self.dtype,
+            trainable=False)
+
+        self.recurrent_regularizer.center = self.add_weight(
+            'recurrent_kernel_center',
+            shape=(self.units, self.units * 4),
+            initializer=tf.keras.initializers.constant(0.),
+            dtype=self.dtype,
+            trainable=False)
+
         self.kernel = self.add_weight(
             shape=(input_dim, self.units * 4),
             name='kernel',
@@ -228,15 +245,18 @@ class LSTMCellCentered(tf.keras.layers.LSTMCell, LayerCentered):
                     return K.concatenate([
                         self.bias_initializer((self.units,), *args, **kwargs),
                         initializers.Ones()((self.units,), *args, **kwargs),
-                        self.bias_initializer((self.units * 2,), *args, **kwargs),
+                        self.bias_initializer(
+                            (self.units * 2,), *args, **kwargs),
                         ])
             else:
                 bias_initializer = self.bias_initializer
-            self.bias_regularizer.center = self.add_weight('bias_center',
-                                                           shape=(self.units * 4,),
-                                                           initializer=tf.keras.initializers.constant(0.),
-                                                           dtype=self.dtype,
-                                                           trainable=False)
+            self.bias_regularizer.center = self.add_weight(
+                'bias_center',
+                shape=(self.units * 4,),
+                initializer=tf.keras.initializers.constant(0.),
+                dtype=self.dtype,
+                trainable=False)
+
             self.bias = self.add_weight(
                           shape=(self.units * 4,),
                           name='bias',
@@ -249,16 +269,19 @@ class LSTMCellCentered(tf.keras.layers.LSTMCell, LayerCentered):
 
         self.client_variable_dict['kernel'] = self.kernel
         self.server_variable_dict['kernel'] = self.kernel
-        self.client_center_variable_dict['kernel'] = self.kernel_regularizer.center
+        self.client_center_variable_dict['kernel'] = \
+            self.kernel_regularizer.center
 
         self.client_variable_dict['recurrent_kernel'] = self.recurrent_kernel
         self.server_variable_dict['recurrent_kernel'] = self.recurrent_kernel
-        self.client_center_variable_dict['recurrent_kernel'] = self.recurrent_regularizer.center
+        self.client_center_variable_dict['recurrent_kernel'] = \
+            self.recurrent_regularizer.center
 
         if self.use_bias:
             self.client_variable_dict['bias'] = self.bias
             self.server_variable_dict['bias'] = self.bias
-            self.client_center_variable_dict['bias'] = self.bias_regularizer.center
+            self.client_center_variable_dict['bias'] = \
+                self.bias_regularizer.center
 
         self.built = True
 
@@ -290,14 +313,16 @@ class EmbeddingCentered(tf.keras.layers.Embedding, LayerCentered):
                  mask_zero=False,
                  input_length=None,
                  **kwargs):
-        super(EmbeddingCentered, self).__init__(input_dim, output_dim,
-                                                embeddings_initializer=embeddings_initializer,
-                                                embeddings_regularizer=None,
-                                                activity_regularizer=activity_regularizer,
-                                                embeddings_constraint=embeddings_constraint,
-                                                mask_zero=mask_zero,
-                                                input_length=input_length,
-                                                **kwargs)
+        super(EmbeddingCentered, self).__init__(
+            input_dim, output_dim,
+            embeddings_initializer=embeddings_initializer,
+            embeddings_regularizer=None,
+            activity_regularizer=activity_regularizer,
+            embeddings_constraint=embeddings_constraint,
+            mask_zero=mask_zero,
+            input_length=input_length,
+            **kwargs)
+
         self.embeddings_regularizer = embeddings_regularizer()
         self.delta_function = tf.subtract
         self.apply_delta_function = tf.add
@@ -308,16 +333,19 @@ class EmbeddingCentered(tf.keras.layers.Embedding, LayerCentered):
     @tf_utils.shape_type_conversion
     def build(self, input_shape):
         def create_weights():
-            self.embeddings_regularizer.center = self.add_weight(shape=(self.input_dim, self.output_dim),
-                                                                 name='embeddings_center',
-                                                                 initializer=tf.keras.initializers.constant(0.),
-                                                                 dtype=self.dtype,
-                                                                 trainable=False)
-            self.embeddings = self.add_weight(shape=(self.input_dim, self.output_dim),
-                                              initializer=self.embeddings_initializer,
-                                              name='embeddings',
-                                              regularizer=self.embeddings_regularizer,
-                                              constraint=self.embeddings_constraint)
+            self.embeddings_regularizer.center = self.add_weight(
+                shape=(self.input_dim, self.output_dim),
+                name='embeddings_center',
+                initializer=tf.keras.initializers.constant(0.),
+                dtype=self.dtype,
+                trainable=False)
+
+            self.embeddings = self.add_weight(
+                shape=(self.input_dim, self.output_dim),
+                initializer=self.embeddings_initializer,
+                name='embeddings',
+                regularizer=self.embeddings_regularizer,
+                constraint=self.embeddings_constraint)
         if context.executing_eagerly() and context.context().num_gpus():
             with ops.device('cpu:0'):
                 create_weights()
@@ -326,7 +354,8 @@ class EmbeddingCentered(tf.keras.layers.Embedding, LayerCentered):
 
         self.client_variable_dict['embeddings'] = self.embeddings
         self.server_variable_dict['embeddings'] = self.embeddings
-        self.client_center_variable_dict['embeddings'] = self.embeddings_regularizer.center
+        self.client_center_variable_dict['embeddings'] = \
+            self.embeddings_regularizer.center
         self.built = True
 
 
@@ -429,11 +458,13 @@ class Conv2DCentered(tf.keras.layers.Conv2D, LayerCentered):
 
         self.client_variable_dict['kernel'] = self.kernel
         self.server_variable_dict['kernel'] = self.kernel
-        self.client_center_variable_dict['kernel'] = self.kernel_regularizer.center
+        self.client_center_variable_dict['kernel'] = \
+            self.kernel_regularizer.center
 
         if self.use_bias:
             self.client_variable_dict['bias'] = self.bias
             self.server_variable_dict['bias'] = self.bias
-            self.client_center_variable_dict['bias'] = self.bias_regularizer.center
+            self.client_center_variable_dict['bias'] = \
+                self.bias_regularizer.center
 
         self.built = True

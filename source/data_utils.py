@@ -33,10 +33,14 @@ def federated_dataset(dataset_conf, data_dir=Path('data')):
         x_test = np.split(x_test, 100)
         y_test = np.split(y_test, 100)
 
-        federated_train_data = post_process_datasets([tf.data.Dataset.from_tensor_slices(data)
-                                                      for data in zip(x_train, y_train)])
-        federated_test_data = post_process_datasets([tf.data.Dataset.from_tensor_slices(data)
-                                                     for data in zip(x_test, y_test)])
+        federated_train_data = post_process_datasets(
+            [tf.data.Dataset.from_tensor_slices(data)
+             for data in zip(x_train, y_train)])
+
+        federated_test_data = post_process_datasets(
+            [tf.data.Dataset.from_tensor_slices(data)
+             for data in zip(x_test, y_test)])
+
         train_size = [x.shape[0] for x in x_train]
         test_size = [x.shape[0] for x in x_test]
 
@@ -104,10 +108,13 @@ def federated_dataset(dataset_conf, data_dir=Path('data')):
                 list(map(preprocess, client[0]))), client[1])
                 for client in federated_test_data]
 
-        federated_train_data = post_process_datasets([tf.data.Dataset.from_tensor_slices(data)
-                                                      for data in federated_train_data])
-        federated_test_data = post_process_datasets([tf.data.Dataset.from_tensor_slices(data)
-                                                     for data in federated_test_data])
+        federated_train_data = post_process_datasets(
+            [tf.data.Dataset.from_tensor_slices(data)
+             for data in federated_train_data])
+        federated_test_data = post_process_datasets(
+            [tf.data.Dataset.from_tensor_slices(data)
+             for data in federated_test_data])
+
         federated_train_data = federated_train_data[0:num_clients]
         federated_test_data = federated_test_data[0:num_clients]
         train_size = train_size[0:num_clients]
@@ -118,8 +125,13 @@ def federated_dataset(dataset_conf, data_dir=Path('data')):
         x, y, x_t, y_t = data_split(x, y)
         train_size = [xs.shape[0] for xs in x]
         test_size = [xs.shape[0] for xs in x_t]
-        federated_train_data = post_process_datasets([tf.data.Dataset.from_tensor_slices(data) for data in zip(x, y)])
-        federated_test_data = post_process_datasets([tf.data.Dataset.from_tensor_slices(data) for data in zip(x_t, y_t)])
+
+        federated_train_data = post_process_datasets(
+            [tf.data.Dataset.from_tensor_slices(data)
+             for data in zip(x, y)])
+        federated_test_data = post_process_datasets(
+            [tf.data.Dataset.from_tensor_slices(data)
+             for data in zip(x_t, y_t)])
 
         federated_train_data = federated_train_data[0:num_clients]
         federated_test_data = federated_test_data[0:num_clients]
@@ -131,8 +143,13 @@ def federated_dataset(dataset_conf, data_dir=Path('data')):
         x, y, x_t, y_t = data_split(x, y)
         train_size = [xs.shape[0] for xs in x]
         test_size = [xs.shape[0] for xs in x_t]
-        federated_train_data = post_process_datasets([tf.data.Dataset.from_tensor_slices(data) for data in zip(x, y)])
-        federated_test_data = post_process_datasets([tf.data.Dataset.from_tensor_slices(data) for data in zip(x_t, y_t)])
+
+        federated_train_data = post_process_datasets(
+            [tf.data.Dataset.from_tensor_slices(data)
+             for data in zip(x, y)])
+        federated_test_data = post_process_datasets(
+            [tf.data.Dataset.from_tensor_slices(data)
+             for data in zip(x_t, y_t)])
 
         federated_train_data = federated_train_data[0:num_clients]
         federated_test_data = federated_test_data[0:num_clients]
@@ -147,15 +164,19 @@ def federated_dataset(dataset_conf, data_dir=Path('data')):
         x, y, x_t, y_t = data_split(x, y)
         train_size = [xs.shape[0] for xs in x]
         test_size = [xs.shape[0] for xs in x_t]
-        federated_train_data = post_process_datasets([tf.data.Dataset.from_tensor_slices(data) for data in zip(x, y)])
+        federated_train_data = post_process_datasets(
+            [tf.data.Dataset.from_tensor_slices(data)
+             for data in zip(x, y)])
         federated_test_data = post_process_datasets(
-            [tf.data.Dataset.from_tensor_slices(data) for data in zip(x_t, y_t)])
+            [tf.data.Dataset.from_tensor_slices(data)
+             for data in zip(x_t, y_t)])
 
     return federated_train_data, federated_test_data, train_size, test_size
 
 
 def data_split(x, y, test_size=0.25):
-    x, x_t, y, y_t = zip(*[train_test_split(x_i, y_i, test_size=test_size) for x_i, y_i in zip(x, y)])
+    x, x_t, y, y_t = zip(*[train_test_split(x_i, y_i, test_size=test_size)
+                           for x_i, y_i in zip(x, y)])
     return x, y, x_t, y_t
 
 
@@ -310,14 +331,18 @@ def vehicle_sensor_preprocess(data_dir=None):
             x_tmp = []
             for file_name in file_names:
                 if 'feat' in file_name:
-                    dt_tmp = pd.read_csv(os.path.join(root, file_name),  sep=' ',
-                                         skipinitialspace=True, header=None).values[:, :50]
+                    dt_tmp = pd.read_csv(
+                        os.path.join(root, file_name), sep=' ',
+                        skipinitialspace=True, header=None).values[:, :50]
                     x_tmp.append(dt_tmp)
             if len(x_tmp) == 2:
                 x_tmp = np.concatenate(x_tmp, axis=1)
                 x.append(x_tmp)
-                task_index.append(int(os.path.basename(root)[1:])*np.ones(x_tmp.shape[0]))
-                y.append(int('aav' in os.path.basename(os.path.dirname(root)))*np.ones(x_tmp.shape[0]))
+                task_index.append(
+                    int(os.path.basename(root)[1:])*np.ones(x_tmp.shape[0]))
+                y.append(
+                    int('aav' in os.path.basename(
+                        os.path.dirname(root)))*np.ones(x_tmp.shape[0]))
 
     x = np.concatenate(x)
     y = np.concatenate(y)
@@ -332,9 +357,11 @@ def vehicle_sensor_preprocess(data_dir=None):
     return x, y
 
 
-def synthetic(num_clients=30, num_class=10, dimension=60, alpha=0., beta=0., iid=False):
+def synthetic(num_clients=30, num_class=10, dimension=60, alpha=0., beta=0.,
+              iid=False):
     np.random.seed(0)
-    samples_per_user = np.random.lognormal(4, 2, (num_clients)).astype(int) + 50
+    samples_per_user = np.random.lognormal(
+        4, 2, (num_clients)).astype(int) + 50
     print(samples_per_user)
     num_samples = np.sum(samples_per_user)
 
@@ -370,7 +397,8 @@ def synthetic(num_clients=30, num_class=10, dimension=60, alpha=0., beta=0., iid
             W = W_global
             b = b_global
 
-        xx = np.random.multivariate_normal(mean_x[i], cov_x, samples_per_user[i])
+        xx = np.random.multivariate_normal(
+            mean_x[i], cov_x, samples_per_user[i])
         yy = np.zeros(samples_per_user[i])
 
         for j in range(samples_per_user[i]):
@@ -411,7 +439,8 @@ def shakspeare(num_clients=-1, seq_lenght=80, data_dir=None):
                 .shuffle(BUFFER_SIZE))
 
     def data(client, source):
-        return postprocess(preprocess(source.create_tf_dataset_for_client(client)))
+        return postprocess(
+            preprocess(source.create_tf_dataset_for_client(client)))
 
     if data_dir:
         train_file = data_dir / 'datasets' / 'shakespeare_train.h5'
@@ -437,8 +466,12 @@ def shakspeare(num_clients=-1, seq_lenght=80, data_dir=None):
     clients = [train_data.client_ids[i] for i in indx]
     clients = clients[0:num_clients]
 
-    train_size = [len(list(preprocess(train_data.create_tf_dataset_for_client(client)))) for client in clients]
-    test_size = [len(list(preprocess(test_data.create_tf_dataset_for_client(client)))) for client in clients]
+    train_size = [len(list(preprocess(
+        train_data.create_tf_dataset_for_client(client))))
+        for client in clients]
+    test_size = [len(list(preprocess(
+        test_data.create_tf_dataset_for_client(client))))
+        for client in clients]
 
     federated_train_data = [data(client, train_data) for client in clients]
     federated_test_data = [data(client, test_data) for client in clients]
@@ -455,7 +488,8 @@ def batch_dataset(dataset, batch_size, padding=None, seq_length=None):
             target_text = tf.map_fn(lambda x: x[1:], chunk)
             return (input_text, target_text)
 
-        return dataset.padded_batch(batch_size,
-                                    padded_shapes=[seq_length + 1],
-                                    drop_remainder=True,
-                                    padding_values=tf.cast(0, tf.int64)).map(split_input_target)
+        return dataset.padded_batch(
+            batch_size,
+            padded_shapes=[seq_length + 1],
+            drop_remainder=True,
+            padding_values=tf.cast(0, tf.int64)).map(split_input_target)

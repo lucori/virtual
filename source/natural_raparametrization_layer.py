@@ -20,7 +20,8 @@ class NonNegPrec(Constraint):
 
     def __call__(self, w):
         prec = w[..., -1]
-        prec = prec * math_ops.cast(math_ops.greater_equal(prec, eps), K.floatx())
+        prec = prec * math_ops.cast(
+            math_ops.greater_equal(prec, eps), K.floatx())
         return tf.stack([w[..., 0], prec], axis=-1)
 
 
@@ -43,7 +44,8 @@ class NaturalConstraint(tf.keras.constraints.Constraint):
         return tf.stack([gamma, w[..., 1]], axis=-1)
 
 
-def tensor_natural_par_fn(is_singular=False, natural_initializer=tf.constant_initializer(0.),
+def tensor_natural_par_fn(is_singular=False,
+                          natural_initializer=tf.constant_initializer(0.),
                           natural_regularizer=None, natural_constraint=None,
                           **kwargs):
     def _fn(dtype, shape, name, trainable, add_variable_fn):
@@ -64,14 +66,20 @@ def tensor_natural_par_fn(is_singular=False, natural_initializer=tf.constant_ini
 
 class VariationalReparametrizedNatural(LayerCentered):
 
-    def build_posterior_fn_natural(self, shape, dtype, name, posterior_fn, prior_fn):
+    def build_posterior_fn_natural(self, shape, dtype, name, posterior_fn,
+                                   prior_fn):
         natural_par_shape = list(shape) + [2]
-        server_par = self.add_variable(name=name+'_server_par', shape=natural_par_shape, dtype=dtype, trainable=False,
+        server_par = self.add_variable(name=name+'_server_par',
+                                       shape=natural_par_shape,
+                                       dtype=dtype, trainable=False,
                                        initializer=tf.keras.initializers.zeros)
-        client_par = self.add_variable(name=name+'_client_par', shape=natural_par_shape, dtype=dtype, trainable=False,
+        client_par = self.add_variable(name=name+'_client_par',
+                                       shape=natural_par_shape,
+                                       dtype=dtype, trainable=False,
                                        initializer=tf.keras.initializers.zeros)
 
-        ratio_par = tfp.util.DeferredTensor(server_par, lambda x: x - self.client_weight * client_par)
+        ratio_par = tfp.util.DeferredTensor(
+            server_par, lambda x: x - self.client_weight * client_par)
 
         posterior_fn = posterior_fn(ratio_par)
         prior_fn = prior_fn(ratio_par)
@@ -82,12 +90,14 @@ class VariationalReparametrizedNatural(LayerCentered):
 
     def initialize_kernel_posterior(self):
         for key in self.client_variable_dict.keys():
-            self.client_variable_dict[key].assign(self.server_variable_dict[key])
+            self.client_variable_dict[key].assign(
+                self.server_variable_dict[key])
 
     def apply_damping(self, damping_factor):
         for key in self.server_variable_dict.keys():
-            damped = self.apply_delta_function(self.client_variable_dict[key] * damping_factor,
-                                               self.client_center_variable_dict[key] * (1 - damping_factor))
+            damped = self.apply_delta_function(
+                self.client_variable_dict[key] * damping_factor,
+                self.client_center_variable_dict[key] * (1 - damping_factor))
             self.client_variable_dict[key].assign(damped)
 
     def renormalize_natural_mean_field_normal_fn(self, ratio_par):
@@ -96,15 +106,20 @@ class VariationalReparametrizedNatural(LayerCentered):
                 natural_initializer=None,
                 natural_regularizer=None, natural_constraint=NonNegPrec(),
                 **kwargs):
-            natural_par_fn = tensor_natural_par_fn(natural_initializer=natural_initializer,
-                                                   natural_regularizer=natural_regularizer,
-                                                   natural_constraint=natural_constraint,
-                                                   **kwargs)
-            natural = natural_par_fn(dtype, shape, name, trainable, add_variable_fn)
+            natural_par_fn = tensor_natural_par_fn(
+                natural_initializer=natural_initializer,
+                natural_regularizer=natural_regularizer,
+                natural_constraint=natural_constraint,
+                **kwargs)
+            natural = natural_par_fn(
+                dtype, shape, name, trainable, add_variable_fn)
             self.client_variable_dict['_'.join(name.split('_')[0:-1])] = natural
-            natural_reparametrized = tfp.util.DeferredTensor(natural, lambda x: x * self.client_weight + ratio_par)
-            gamma = tfp.util.DeferredTensor(natural_reparametrized, lambda x: x[..., 0], shape=shape)
-            prec = tfp.util.DeferredTensor(natural_reparametrized, lambda x: x[..., 1], shape=shape)
+            natural_reparametrized = tfp.util.DeferredTensor(
+                natural, lambda x: x * self.client_weight + ratio_par)
+            gamma = tfp.util.DeferredTensor(
+                natural_reparametrized, lambda x: x[..., 0], shape=shape)
+            prec = tfp.util.DeferredTensor(
+                natural_reparametrized, lambda x: x[..., 1], shape=shape)
 
             dist = NormalNatural(gamma=gamma, prec=prec)
             batch_ndims = tf.size(dist.batch_shape_tensor())
@@ -113,17 +128,22 @@ class VariationalReparametrizedNatural(LayerCentered):
         return _fn
 
     def natural_tensor_multivariate_normal_fn(self, ratio_par):
-        def _fn(dtype, shape, name, trainable, add_variable_fn, initializer=natural_prior_initializer_fn(),
+        def _fn(dtype, shape, name, trainable, add_variable_fn,
+                initializer=natural_prior_initializer_fn(),
                 regularizer=None, constraint=None, **kwargs):
             del trainable
-            natural_par_fn = tensor_natural_par_fn(natural_initializer=initializer,
-                                                   natural_regularizer=regularizer,
-                                                   natural_constraint=constraint,
-                                                   **kwargs)
+            natural_par_fn = tensor_natural_par_fn(
+                natural_initializer=initializer,
+                natural_regularizer=regularizer,
+                natural_constraint=constraint,
+                **kwargs)
             natural = natural_par_fn(dtype, shape, name, False, add_variable_fn)
-            natural_reparametrized = tfp.util.DeferredTensor(natural, lambda x: x * self.client_weight + ratio_par)
-            gamma = tfp.util.DeferredTensor(natural_reparametrized, lambda x: x[..., 0], shape=shape)
-            prec = tfp.util.DeferredTensor(natural_reparametrized, lambda x: x[..., 1], shape=shape)
+            natural_reparametrized = tfp.util.DeferredTensor(
+                natural, lambda x: x * self.client_weight + ratio_par)
+            gamma = tfp.util.DeferredTensor(
+                natural_reparametrized, lambda x: x[..., 0], shape=shape)
+            prec = tfp.util.DeferredTensor(
+                natural_reparametrized, lambda x: x[..., 1], shape=shape)
 
             dist = NormalNatural(gamma=gamma, prec=prec)
             batch_ndims = tf.size(input=dist.batch_shape_tensor())
@@ -134,21 +154,23 @@ class VariationalReparametrizedNatural(LayerCentered):
 
 class DenseSharedNatural(VariationalReparametrizedNatural):
 
-    def __init__(self, units,
-                 activation=None,
-                 activity_regularizer=None,
-                 client_weight=1.,
-                 trainable=True,
-                 kernel_posterior_fn=None,
-                 kernel_posterior_tensor_fn=(lambda d: d.sample()),
-                 kernel_prior_fn=None,
-                 kernel_divergence_fn=(lambda q, p, ignore: tfd.kl_divergence(q, p)),
-                 bias_posterior_fn=tfp_layers_util.default_mean_field_normal_fn(is_singular=True),
-                 bias_posterior_tensor_fn=(lambda d: d.sample()),
-                 bias_prior_fn=None,
-                 bias_divergence_fn=(lambda q, p, ignore: tfd.kl_divergence(q, p)),
-                 **kwargs
-                 ):
+    def __init__(
+            self, units,
+            activation=None,
+            activity_regularizer=None,
+            client_weight=1.,
+            trainable=True,
+            kernel_posterior_fn=None,
+            kernel_posterior_tensor_fn=(lambda d: d.sample()),
+            kernel_prior_fn=None,
+            kernel_divergence_fn=(
+                    lambda q, p, ignore: tfd.kl_divergence(q, p)),
+            bias_posterior_fn=tfp_layers_util.default_mean_field_normal_fn(
+                is_singular=True),
+            bias_posterior_tensor_fn=(lambda d: d.sample()),
+            bias_prior_fn=None,
+            bias_divergence_fn=(lambda q, p, ignore: tfd.kl_divergence(q, p)),
+            **kwargs):
 
         self.untransformed_scale_initializer = None
         if 'untransformed_scale_initializer' in kwargs:
@@ -193,11 +215,13 @@ class DenseSharedNatural(VariationalReparametrizedNatural):
 
     def build(self, input_shape):
         input_shape = tf.TensorShape(input_shape)
-        in_size = tf.compat.dimension_value(input_shape.with_rank_at_least(2)[-1])
+        in_size = tf.compat.dimension_value(
+            input_shape.with_rank_at_least(2)[-1])
         if in_size is None:
             raise ValueError('The last dimension of the inputs to `Dense` '
                              'should be defined. Found `None`.')
-        self._input_spec = tf.keras.layers.InputSpec(min_ndim=2, axes={-1: in_size})
+        self._input_spec = tf.keras.layers.InputSpec(
+            min_ndim=2, axes={-1: in_size})
 
         # If self.dtype is None, build weights using the default dtype.
         dtype = tf.as_dtype(self.dtype or tf.keras.backend.floatx())
@@ -240,26 +264,30 @@ class DenseSharedNatural(VariationalReparametrizedNatural):
                 self.trainable, self.add_variable)
 
         if self.bias_posterior:
-            self.bias_center = self.add_weight('bias_center',
-                                               shape=[self.units, ],
-                                               initializer=tf.keras.initializers.constant(0.),
-                                               dtype=self.dtype,
-                                               trainable=False)
+            self.bias_center = self.add_weight(
+                'bias_center',
+                shape=[self.units, ],
+                initializer=tf.keras.initializers.constant(0.),
+                dtype=self.dtype,
+                trainable=False)
             self.client_variable_dict['bias'] = self.bias_posterior.distribution.loc
             self.server_variable_dict['bias'] = self.bias_posterior.distribution.loc
             self.client_center_variable_dict['bias'] = self.bias_center
         self.built = True
 
 
-class DenseReparametrizationNaturalShared(DenseSharedNatural, tfp.layers.DenseReparameterization):
+class DenseReparametrizationNaturalShared(
+    DenseSharedNatural, tfp.layers.DenseReparameterization):
     pass
 
 
-class DenseLocalReparametrizationNaturalShared(DenseSharedNatural, tfp.layers.DenseLocalReparameterization):
+class DenseLocalReparametrizationNaturalShared(
+    DenseSharedNatural, tfp.layers.DenseLocalReparameterization):
     def _apply_variational_kernel(self, inputs):
         self.kernel_posterior_affine = tfd.Normal(
             loc=tf.matmul(inputs, self.kernel_posterior.distribution.loc),
-            scale=tf.sqrt(tf.matmul(tf.math.square(inputs), tf.math.square(self.kernel_posterior.distribution.scale))))
+            scale=tf.sqrt(tf.matmul(tf.math.square(inputs), tf.math.square(
+                self.kernel_posterior.distribution.scale))))
         self.kernel_posterior_affine_tensor = (
             self.kernel_posterior_tensor_fn(self.kernel_posterior_affine))
         self.kernel_posterior_tensor = None
@@ -272,13 +300,16 @@ def natural_mean_field_normal_fn(natural_initializer=None):
             natural_initializer=natural_initializer,
             natural_regularizer=None, natural_constraint=NonNegPrec(),
             **kwargs):
-        natural_par_fn = tensor_natural_par_fn(natural_initializer=natural_initializer,
-                                               natural_regularizer=natural_regularizer,
-                                               natural_constraint=natural_constraint,
-                                               **kwargs)
+        natural_par_fn = tensor_natural_par_fn(
+            natural_initializer=natural_initializer,
+            natural_regularizer=natural_regularizer,
+            natural_constraint=natural_constraint,
+            **kwargs)
         natural = natural_par_fn(dtype, shape, name, trainable, add_variable_fn)
-        gamma = tfp.util.DeferredTensor(natural, lambda x: x[..., 0], shape=shape)
-        prec = tfp.util.DeferredTensor(natural, lambda x: x[..., 1], shape=shape)
+        gamma = tfp.util.DeferredTensor(
+            natural, lambda x: x[..., 0], shape=shape)
+        prec = tfp.util.DeferredTensor(
+            natural, lambda x: x[..., 1], shape=shape)
 
         dist = NormalNatural(gamma=gamma, prec=prec)
         batch_ndims = tf.size(dist.batch_shape_tensor())
@@ -288,7 +319,8 @@ def natural_mean_field_normal_fn(natural_initializer=None):
 
 
 def natural_tensor_multivariate_normal_fn():
-    def _fn(dtype, shape, name, trainable, add_variable_fn, initializer=natural_prior_initializer_fn(),
+    def _fn(dtype, shape, name, trainable, add_variable_fn,
+            initializer=natural_prior_initializer_fn(),
             regularizer=None, constraint=None, **kwargs):
         del trainable
         natural_par_fn = tensor_natural_par_fn(natural_initializer=initializer,
@@ -296,8 +328,10 @@ def natural_tensor_multivariate_normal_fn():
                                                natural_constraint=constraint,
                                                **kwargs)
         natural = natural_par_fn(dtype, shape, name, False, add_variable_fn)
-        gamma = tfp.util.DeferredTensor(natural, lambda x: x[..., 0], shape=shape)
-        prec = tfp.util.DeferredTensor(natural, lambda x: x[..., 1], shape=shape)
+        gamma = tfp.util.DeferredTensor(
+            natural, lambda x: x[..., 0], shape=shape)
+        prec = tfp.util.DeferredTensor(
+            natural, lambda x: x[..., 1], shape=shape)
 
         dist = NormalNatural(gamma=gamma, prec=prec)
         batch_ndims = tf.size(input=dist.batch_shape_tensor())
@@ -306,7 +340,8 @@ def natural_tensor_multivariate_normal_fn():
     return _fn
 
 
-def natural_initializer_fn(loc_stdev=0.1, u_scale_init_avg=-5, u_scale_init_stdev=0.1,
+def natural_initializer_fn(loc_stdev=0.1, u_scale_init_avg=-5,
+                           u_scale_init_stdev=0.1,
                            untransformed_scale_initializer=None,
                            loc_initializer=None):
     if loc_initializer:
@@ -314,10 +349,12 @@ def natural_initializer_fn(loc_stdev=0.1, u_scale_init_avg=-5, u_scale_init_stde
     else:
         loc_init = tf.random_normal_initializer(stddev=loc_stdev)
     if untransformed_scale_initializer is None:
-        untransformed_scale_initializer = tf.random_normal_initializer(mean=u_scale_init_avg, stddev=u_scale_init_stdev)
+        untransformed_scale_initializer = tf.random_normal_initializer(
+            mean=u_scale_init_avg, stddev=u_scale_init_stdev)
 
     def natural_initializer(shape, dtype=tf.float32):
-        prec = precision_from_untransformed_scale(untransformed_scale_initializer(shape[:-1], dtype))
+        prec = precision_from_untransformed_scale(
+            untransformed_scale_initializer(shape[:-1], dtype))
         gamma = loc_init(shape[:-1], dtype) * prec
         natural = tf.stack([gamma, prec], axis=-1)
         tf.debugging.check_numerics(natural, 'initializer')
@@ -472,11 +509,12 @@ class Conv2DVirtualNatural(VariationalReparametrizedNatural,
                 self.data_format, self.rank + 2))
 
         if self.bias_posterior:
-            self.bias_center = self.add_weight('bias_center',
-                                               shape=[self.units, ],
-                                               initializer=tf.keras.initializers.constant(0.),
-                                               dtype=self.dtype,
-                                               trainable=False)
+            self.bias_center = self.add_weight(
+                'bias_center',
+                shape=[self.units, ],
+                initializer=tf.keras.initializers.constant(0.),
+                dtype=self.dtype,
+                trainable=False)
             self.client_variable_dict['bias'] = self.bias_posterior.distribution.loc
             self.server_variable_dict['bias'] = self.bias_posterior.distribution.loc
             self.client_center_variable_dict['bias'] = self.bias_center
@@ -613,11 +651,12 @@ class Conv1DVirtualNatural(tfp.layers.Convolution1DReparameterization,
                 self.data_format, self.rank + 2))
 
         if self.bias_posterior:
-            self.bias_center = self.add_weight('bias_center',
-                                               shape=[self.units, ],
-                                               initializer=tf.keras.initializers.constant(0.),
-                                               dtype=self.dtype,
-                                               trainable=False)
+            self.bias_center = self.add_weight(
+                'bias_center',
+                shape=[self.units, ],
+                initializer=tf.keras.initializers.constant(0.),
+                dtype=self.dtype,
+                trainable=False)
             self.client_variable_dict['bias'] = self.bias_posterior.distribution.loc
             self.server_variable_dict['bias'] = self.bias_posterior.distribution.loc
             self.client_center_variable_dict['bias'] = self.bias_center
@@ -625,7 +664,8 @@ class Conv1DVirtualNatural(tfp.layers.Convolution1DReparameterization,
         self.built = True
 
 
-class NaturalGaussianEmbedding(tf.keras.layers.Embedding, VariationalReparametrizedNatural):
+class NaturalGaussianEmbedding(
+    tf.keras.layers.Embedding, VariationalReparametrizedNatural):
 
     def __init__(self,
                  input_dim,
@@ -634,11 +674,13 @@ class NaturalGaussianEmbedding(tf.keras.layers.Embedding, VariationalReparametri
                  input_length=None,
                  client_weight=1.,
                  trainable=True,
-                 embeddings_initializer=tf.keras.initializers.RandomUniform(-0.01, 0.01),
+                 embeddings_initializer=tf.keras.initializers.RandomUniform(
+                     -0.01, 0.01),
                  embedding_posterior_fn=None,
                  embedding_posterior_tensor_fn=(lambda d: d.sample()),
                  embedding_prior_fn=None,
-                 embedding_divergence_fn=(lambda q, p, ignore: tfd.kl_divergence(q, p)),
+                 embedding_divergence_fn=(
+                         lambda q, p, ignore: tfd.kl_divergence(q, p)),
                  **kwargs
                  ):
 
@@ -677,11 +719,13 @@ class NaturalGaussianEmbedding(tf.keras.layers.Embedding, VariationalReparametri
         if context.executing_eagerly() and context.context().num_gpus():
             with ops.device('cpu:0'):
                 self.embedding_posterior_fn, self.embedding_prior_fn = \
-                    self.build_posterior_fn_natural(shape, dtype, 'embedding', self.embedding_posterior_fn,
+                    self.build_posterior_fn_natural(shape, dtype, 'embedding',
+                                                    self.embedding_posterior_fn,
                                                     self.embedding_prior_fn)
         else:
             self.embedding_posterior_fn, self.embedding_prior_fn = \
-                self.build_posterior_fn_natural(shape, dtype, 'embedding', self.embedding_posterior_fn,
+                self.build_posterior_fn_natural(shape, dtype, 'embedding',
+                                                self.embedding_posterior_fn,
                                                 self.embedding_prior_fn)
 
         natural_initializer = natural_initializer_fn(
@@ -768,24 +812,26 @@ class LSTMCellVariationalNatural(tf.keras.layers.LSTMCell, VariationalReparametr
         if recurrent_kernel_prior_fn is None:
             recurrent_kernel_prior_fn = self.natural_tensor_multivariate_normal_fn
 
-        super(LSTMCellVariationalNatural, self).__init__(units,
-                                                         activation=activation,
-                                                         recurrent_activation=recurrent_activation,
-                                                         use_bias=use_bias,
-                                                         kernel_initializer=kernel_initializer,
-                                                         recurrent_initializer=recurrent_initializer,
-                                                         bias_initializer=bias_initializer,
-                                                         unit_forget_bias=unit_forget_bias,
-                                                         kernel_regularizer=None,
-                                                         recurrent_regularizer=None,
-                                                         bias_regularizer=None,
-                                                         kernel_constraint=kernel_constraint,
-                                                         recurrent_constraint=recurrent_constraint,
-                                                         bias_constraint=bias_constraint,
-                                                         dropout=dropout,
-                                                         recurrent_dropout=recurrent_dropout,
-                                                         implementation=implementation,
-                                                         **kwargs)
+        super(LSTMCellVariationalNatural, self).__init__(
+            units,
+            activation=activation,
+            recurrent_activation=recurrent_activation,
+            use_bias=use_bias,
+            kernel_initializer=kernel_initializer,
+            recurrent_initializer=recurrent_initializer,
+            bias_initializer=bias_initializer,
+            unit_forget_bias=unit_forget_bias,
+            kernel_regularizer=None,
+            recurrent_regularizer=None,
+            bias_regularizer=None,
+            kernel_constraint=kernel_constraint,
+            recurrent_constraint=recurrent_constraint,
+            bias_constraint=bias_constraint,
+            dropout=dropout,
+            recurrent_dropout=recurrent_dropout,
+            implementation=implementation,
+            **kwargs)
+
         self.kernel_posterior_fn = kernel_posterior_fn
         self.kernel_posterior_tensor_fn = kernel_posterior_tensor_fn
         self.recurrent_kernel_posterior_fn = recurrent_kernel_posterior_fn
@@ -814,14 +860,16 @@ class LSTMCellVariationalNatural(tf.keras.layers.LSTMCell, VariationalReparametr
         shape_kernel = (input_dim, self.units * 4)
         shape_recurrent = (self.units, self.units * 4)
         dtype = tf.as_dtype(self.dtype or tf.keras.backend.floatx())
-        self.kernel_posterior_fn, self.kernel_prior_fn = self.build_posterior_fn_natural(shape_kernel, dtype, 'kernel',
-                                                                                 self.kernel_posterior_fn,
-                                                                                 self.kernel_prior_fn)
+        self.kernel_posterior_fn, self.kernel_prior_fn = \
+            self.build_posterior_fn_natural(shape_kernel, dtype, 'kernel',
+                                            self.kernel_posterior_fn,
+                                            self.kernel_prior_fn)
 
-        self.recurrent_kernel_posterior_fn, self.recurrent_kernel_prior_fn = self.build_posterior_fn_natural(shape_recurrent, dtype,
-                                                                                                     'recurrent_kernel',
-                                                                                 self.recurrent_kernel_posterior_fn,
-                                                                                 self.recurrent_kernel_prior_fn)
+        self.recurrent_kernel_posterior_fn, self.recurrent_kernel_prior_fn = \
+            self.build_posterior_fn_natural(shape_recurrent, dtype,
+                                            'recurrent_kernel',
+                                            self.recurrent_kernel_posterior_fn,
+                                            self.recurrent_kernel_prior_fn)
 
         kernel_initializer = natural_initializer_fn(
             loc_stdev=0.1,
@@ -833,12 +881,13 @@ class LSTMCellVariationalNatural(tf.keras.layers.LSTMCell, VariationalReparametr
         if self.kernel_regularizer: self.kernel_regularizer = NaturalRegularizer(self.kernel_regularizer)
         if self.kernel_constraint: self.kernel_constraint = NaturalConstraint(self.kernel_constraint)
 
-        self.kernel_posterior = self.kernel_posterior_fn(dtype, shape_kernel, 'kernel_posterior', self.trainable,
-                                                         self.add_variable,
-                                                         natural_initializer=kernel_initializer,
-                                                         natural_regularizer=self.kernel_regularizer,
-                                                         natural_constraint=self.kernel_constraint,
-                                                         caching_device=default_caching_device)
+        self.kernel_posterior = self.kernel_posterior_fn(
+            dtype, shape_kernel, 'kernel_posterior', self.trainable,
+            self.add_variable,
+            natural_initializer=kernel_initializer,
+            natural_regularizer=self.kernel_regularizer,
+            natural_constraint=self.kernel_constraint,
+            caching_device=default_caching_device)
 
         if self.kernel_prior_fn is None:
             self.kernel_prior = None
@@ -851,18 +900,25 @@ class LSTMCellVariationalNatural(tf.keras.layers.LSTMCell, VariationalReparametr
             loc_stdev=0.1,
             u_scale_init_avg=-5,
             u_scale_init_stdev=0.1,
-            untransformed_scale_initializer=self.untransformed_scale_initializer,
+            untransformed_scale_initializer=
+            self.untransformed_scale_initializer,
             loc_initializer=self.recurrent_initializer)
-        if self.recurrent_regularizer: self.recurrent_regularizer = NaturalRegularizer(self.recurrent_regularizer)
-        if self.recurrent_constraint: self.recurrent_constraint = NaturalConstraint(self.recurrent_constraint)
 
-        self.recurrent_kernel_posterior = self.recurrent_kernel_posterior_fn(dtype, shape_recurrent, 'recurrent_kernel_posterior',
-                                                                             self.trainable,
-                                                                             self.add_variable,
-                                                                             natural_initializer=recurrent_initializer,
-                                                                             natural_regularizer=self.recurrent_regularizer,
-                                                                             natural_constraint=self.recurrent_constraint,
-                                                                             caching_device=default_caching_device)
+        if self.recurrent_regularizer:
+            self.recurrent_regularizer = NaturalRegularizer(
+                self.recurrent_regularizer)
+        if self.recurrent_constraint:
+            self.recurrent_constraint = NaturalConstraint(
+                self.recurrent_constraint)
+
+        self.recurrent_kernel_posterior = self.recurrent_kernel_posterior_fn(
+            dtype, shape_recurrent, 'recurrent_kernel_posterior',
+            self.trainable,
+            self.add_variable,
+            natural_initializer=recurrent_initializer,
+            natural_regularizer=self.recurrent_regularizer,
+            natural_constraint=self.recurrent_constraint,
+            caching_device=default_caching_device)
 
         if self.recurrent_kernel_prior_fn is None:
             self.recurrent_kernel_prior = None
@@ -907,7 +963,8 @@ class LSTMCellVariationalNatural(tf.keras.layers.LSTMCell, VariationalReparametr
 
         self.built = True
 
-    def _apply_divergence(self, divergence_fn, posterior, prior, name, posterior_tensor=None):
+    def _apply_divergence(self, divergence_fn, posterior, prior, name,
+                          posterior_tensor=None):
         divergence = tf.identity(
             divergence_fn(
                 posterior, prior, posterior_tensor),
@@ -916,7 +973,8 @@ class LSTMCellVariationalNatural(tf.keras.layers.LSTMCell, VariationalReparametr
 
     def sample_weights(self):
         self.kernel = self.kernel_posterior_tensor_fn(self.kernel_posterior)
-        self.recurrent_kernel = self.recurrent_kernel_posterior_tensor_fn(self.recurrent_kernel_posterior)
+        self.recurrent_kernel = self.recurrent_kernel_posterior_tensor_fn(
+            self.recurrent_kernel_posterior)
 
 
 class LSTMCellReparametrizationNatural(tf.keras.layers.LSTMCell):
@@ -966,24 +1024,26 @@ class LSTMCellReparametrizationNatural(tf.keras.layers.LSTMCell):
         if recurrent_kernel_prior_fn is None:
             recurrent_kernel_prior_fn = self.natural_tensor_multivariate_normal_fn
 
-        super(LSTMCellReparametrizationNatural, self).__init__(units,
-                                                               activation=activation,
-                                                               recurrent_activation=recurrent_activation,
-                                                               use_bias=use_bias,
-                                                               kernel_initializer=kernel_initializer,
-                                                               recurrent_initializer=recurrent_initializer,
-                                                               bias_initializer=bias_initializer,
-                                                               unit_forget_bias=unit_forget_bias,
-                                                               kernel_regularizer=None,
-                                                               recurrent_regularizer=None,
-                                                               bias_regularizer=None,
-                                                               kernel_constraint=kernel_constraint,
-                                                               recurrent_constraint=recurrent_constraint,
-                                                               bias_constraint=bias_constraint,
-                                                               dropout=dropout,
-                                                               recurrent_dropout=recurrent_dropout,
-                                                               implementation=implementation,
-                                                               **kwargs)
+        super(LSTMCellReparametrizationNatural, self).__init__(
+            units,
+            activation=activation,
+            recurrent_activation=recurrent_activation,
+            use_bias=use_bias,
+            kernel_initializer=kernel_initializer,
+            recurrent_initializer=recurrent_initializer,
+            bias_initializer=bias_initializer,
+            unit_forget_bias=unit_forget_bias,
+            kernel_regularizer=None,
+            recurrent_regularizer=None,
+            bias_regularizer=None,
+            kernel_constraint=kernel_constraint,
+            recurrent_constraint=recurrent_constraint,
+            bias_constraint=bias_constraint,
+            dropout=dropout,
+            recurrent_dropout=recurrent_dropout,
+            implementation=implementation,
+            **kwargs)
+
         self.kernel_posterior_fn = kernel_posterior_fn
         self.kernel_posterior_tensor_fn = kernel_posterior_tensor_fn
         self.recurrent_kernel_posterior_fn = recurrent_kernel_posterior_fn
@@ -1085,7 +1145,8 @@ class LSTMCellReparametrizationNatural(tf.keras.layers.LSTMCell):
 
         self.built = True
 
-    def _apply_divergence(self, divergence_fn, posterior, prior, name, posterior_tensor=None):
+    def _apply_divergence(self, divergence_fn, posterior, prior, name,
+                          posterior_tensor=None):
         divergence = tf.identity(
             divergence_fn(
                 posterior, prior, posterior_tensor),
@@ -1094,4 +1155,40 @@ class LSTMCellReparametrizationNatural(tf.keras.layers.LSTMCell):
 
     def sample_weights(self):
         self.kernel = self.kernel_posterior_tensor_fn(self.kernel_posterior)
-        self.recurrent_kernel = self.recurrent_kernel_posterior_tensor_fn(self.recurrent_kernel_posterior)
+        self.recurrent_kernel = self.recurrent_kernel_posterior_tensor_fn(
+            self.recurrent_kernel_posterior)
+
+
+class RNNVarReparametrized(tf.keras.layers.RNN):
+
+    def compute_delta(self):
+        return self.cell.compute_delta()
+
+    def renew_center(self, center_to_update=True):
+        self.cell.renew_center(center_to_update)
+
+    def apply_delta(self, delta):
+        self.cell.apply_delta(delta)
+
+    def receive_and_save_weights(self, layer_server):
+        self.cell.receive_and_save_weights(layer_server.cell)
+
+    def initialize_kernel_posterior(self):
+        self.cell.initialize_kernel_posterior()
+
+    def apply_damping(self, damping_factor):
+        self.cell.apply_damping(damping_factor)
+
+    def call(self,
+             inputs,
+             mask=None,
+             training=None,
+             initial_state=None,
+             constants=None):
+        self.cell.sample_weights()
+        return super(RNNVarReparametrized, self).call(
+            inputs,
+            mask=mask,
+            training=training,
+            initial_state=initial_state,
+            constants=constants)

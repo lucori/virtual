@@ -17,18 +17,9 @@ from source.federated_devices import _Server
 from source.centered_layers import (DenseCentered, CenteredL2Regularizer,
                                     EmbeddingCentered, LSTMCellCentered,
                                     RNNCentered, Conv2DCentered)
-from source.dense_reparametrization_shared import Conv1DVirtual
-from source.dense_reparametrization_shared import Conv2DVirtual
+from source.natural_raparametrization_layer import RNNVarReparametrized
 from source.natural_raparametrization_layer import Conv1DVirtualNatural
 from source.natural_raparametrization_layer import Conv2DVirtualNatural
-from source.dense_reparametrization_shared import DenseShared
-from source.dense_reparametrization_shared import DenseLocalReparametrizationShared
-from source.dense_reparametrization_shared import DenseReparametrizationShared
-from source.dense_reparametrization_shared import RNNVarReparametrized
-from source.dense_reparametrization_shared import RNNReparametrized
-from source.dense_reparametrization_shared import GaussianEmbedding
-from source.dense_reparametrization_shared import LSTMCellVariational
-from source.dense_reparametrization_shared import LSTMCellReparametrization
 from source.natural_raparametrization_layer import DenseReparametrizationNaturalShared, \
                                                    DenseLocalReparametrizationNaturalShared,\
                                                    DenseSharedNatural, \
@@ -49,7 +40,8 @@ dir_path = os.path.dirname(os.path.realpath(__file__))
 
 
 def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
-    def create_seq_model(model_class=tf.keras.Sequential, train_size=None, client_weight=None):
+    def create_seq_model(model_class=tf.keras.Sequential, train_size=None,
+                         client_weight=None):
         # Make sure layer parameters are a list
         if not isinstance(dict_conf['layers'], list):
             dict_conf['layers'] = [dict_conf['layers']]
@@ -79,9 +71,7 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                                         * kl_lib.kl_divergence(q, p) / k_w)
 
             if ('scale_init' in dict_conf
-                    and (issubclass(layer_class, DenseShared)
-                         or issubclass(layer_class, DenseSharedNatural)
-                         or layer_class == Conv2DVirtual
+                    and (issubclass(layer_class, DenseSharedNatural)
                          or layer_class == Conv2DVirtualNatural
                          or layer_class == NaturalGaussianEmbedding
                          or layer_class == LSTMCellVariationalNatural)):
@@ -96,9 +86,7 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                                                  stddev=scale_init[1])
 
             if ('loc_init' in dict_conf
-                    and (issubclass(layer_class, DenseShared)
-                         or issubclass(layer_class, DenseSharedNatural)
-                         or layer_class == Conv2DVirtual
+                    and (issubclass(layer_class, DenseSharedNatural)
                          or layer_class == Conv2DVirtualNatural
                          or layer_class == NaturalGaussianEmbedding)):
                 loc_init = dict_conf['loc_init']
@@ -108,18 +96,10 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
 
             if layer_class == DenseReparameterization:
                 layer_params['kernel_divergence_fn'] = kernel_divergence_fn
-            if issubclass(layer_class, DenseShared):
-                layer_params['kernel_divergence_fn'] = kernel_divergence_fn
-                layer_params['num_clients'] = dict_conf['num_clients']
-                layer_params['prior_scale'] = dict_conf['prior_scale']
             if issubclass(layer_class, DenseSharedNatural):
                 layer_params['kernel_divergence_fn'] = kernel_divergence_fn
                 layer_params['client_weight'] = client_weight
                 layer_params['delta_percentile'] = dict_conf.get('delta_percentile', None)
-            if layer_class == Conv2DVirtual:
-                layer_params['kernel_divergence_fn'] = kernel_divergence_fn
-                layer_params['num_clients'] = dict_conf['num_clients']
-                layer_params['prior_scale'] = dict_conf['prior_scale']
             if layer_class == Conv2DVirtualNatural:
                 layer_params['kernel_divergence_fn'] = kernel_divergence_fn
                 layer_params['client_weight'] = client_weight
@@ -136,14 +116,11 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                     lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
                 layer_params['bias_regularizer'] = \
                     lambda: CenteredL2Regularizer(dict_conf['l2_reg'])
-            if layer_class == GaussianEmbedding or layer_class == NaturalGaussianEmbedding:
+            if layer_class == NaturalGaussianEmbedding:
                 layer_params['embedding_divergence_fn'] = kernel_divergence_fn
                 layer_params['batch_input_shape'] = [dict_conf['batch_size'],
                                                      dict_conf['seq_length']]
                 layer_params['mask_zero'] = True
-                if layer_class == GaussianEmbedding:
-                    layer_params['num_clients'] = dict_conf['num_clients']
-                    layer_params['prior_scale'] = dict_conf['prior_scale']
                 if layer_class == NaturalGaussianEmbedding:
                     layer_params['client_weight'] = client_weight
 
@@ -157,10 +134,8 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                                'return_sequences': True,
                                'stateful': True}
                 layer_class = RNNCentered
-            if layer_class == LSTMCellVariational or layer_class == LSTMCellVariationalNatural:
+            if layer_class == LSTMCellVariationalNatural:
                 cell_params = dict(layer_params)
-                if layer_class == LSTMCellVariational:
-                    cell_params['num_clients'] = dict_conf['num_clients']
                 if layer_class == LSTMCellVariationalNatural:
                     cell_params['client_weight'] = client_weight
                 cell_params['kernel_divergence_fn'] = kernel_divergence_fn
@@ -177,7 +152,8 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
             layers.append(layer_class(**layer_params))
         return model_class(layers)
 
-    def create_model_hierarchical(model_class=tf.keras.Model, train_size=None, client_weight=None):
+    def create_model_hierarchical(model_class=tf.keras.Model, train_size=None,
+                                  client_weight=None):
         if 'architecture' in dict_conf and dict_conf['architecture'] == 'rnn':
             b_shape = (dict_conf['batch_size'], dict_conf['seq_length'])
             in_layer = tf.keras.layers.Input(batch_input_shape=b_shape)
@@ -219,9 +195,7 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                                                / k_w)
 
             if ('scale_init' in dict_conf
-                    and (issubclass(layer_class, DenseShared)
-                         or issubclass(layer_class, DenseSharedNatural)
-                         or layer_class == Conv2DVirtual
+                    and (issubclass(layer_class, DenseSharedNatural)
                          or layer_class == Conv2DVirtualNatural)
                          or layer_class == NaturalGaussianEmbedding):
                 scale_init = dict_conf['scale_init']
@@ -234,9 +208,7 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                     tf.random_normal_initializer(mean=untransformed_scale,
                                                  stddev=scale_init[1])
             if ('loc_init' in dict_conf
-                    and (issubclass(layer_class, DenseShared)
-                         or issubclass(layer_class, DenseSharedNatural)
-                         or layer_class == Conv2DVirtual
+                    and (issubclass(layer_class, DenseSharedNatural)
                          or layer_class == Conv2DVirtualNatural
                          or layer_class == NaturalGaussianEmbedding)):
                 loc_init = dict_conf['loc_init']
@@ -244,13 +216,9 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                     tf.random_normal_initializer(mean=loc_init[0],
                                                  stddev=loc_init[1])
 
-            if issubclass(layer_class, DenseShared) \
-                    or issubclass(layer_class, DenseSharedNatural):
+            if issubclass(layer_class, DenseSharedNatural):
                 server_params = dict(layer_params)
                 server_params['kernel_divergence_fn'] = server_divergence_fn
-                if issubclass(layer_class, DenseShared):
-                    server_params['num_clients'] = dict_conf['num_clients']
-                    server_params['prior_scale'] = dict_conf['prior_scale']
                 if issubclass(layer_class, DenseSharedNatural):
                     server_params['client_weight'] = client_weight
                 client_params = dict(layer_params)
@@ -277,14 +245,14 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                      activation=layer_params['activation'])(
                      tf.keras.layers.Add()([server_path, Gate(gate_initializer)(client_path)]))
 
-            elif (issubclass(layer_class, Conv2DVirtual)
-                  or issubclass(layer_class, Conv2DVirtualNatural)):
+            elif issubclass(layer_class, Conv2DVirtualNatural):
                 client_params = dict(layer_params)
                 server_params = dict(layer_params)
 
                 if issubclass(layer_class, Conv2DVirtualNatural):
                     natural_initializer = natural_initializer_fn(
-                        untransformed_scale_initializer=layer_params['untransformed_scale_initializer'])
+                        untransformed_scale_initializer=
+                        layer_params['untransformed_scale_initializer'])
                     client_params['kernel_posterior_fn'] = client_posterior_fn(natural_initializer)
                     client_params['kernel_prior_fn'] = client_prior_fn()
                     server_params['client_weight'] = client_weight
@@ -297,9 +265,6 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                     **client_params)(client_path)
 
                 server_params['kernel_divergence_fn'] = server_divergence_fn
-                if issubclass(layer_class, Conv2DVirtual):
-                    server_params['num_clients'] = dict_conf['num_clients']
-                    server_params['prior_scale'] = dict_conf['prior_scale']
                 server_path = layer_class(**server_params)(server_path)
                 gate_initializer = tf.keras.initializers.RandomUniform(
                     minval=0, maxval=0.1)
@@ -310,33 +275,6 @@ def get_compiled_model_fn_from_dict(dict_conf, sample_batch):
                     activation=layer_params['activation'])(
                     tf.keras.layers.Add()(
                         [server_path, Gate(gate_initializer)(client_path)]))
-            elif issubclass(layer_class, LSTMCellVariational):
-                server_params = dict(layer_params)
-                server_params['num_clients'] = dict_conf['num_clients']
-                server_params['prior_scale'] = dict_conf['prior_scale']
-                server_params['kernel_divergence_fn'] = server_divergence_fn
-                server_params['recurrent_kernel_divergence_fn'] = \
-                    server_reccurrent_divergence_fn
-                server_cell = layer_class(**server_params)
-                server_params = {'cell': server_cell,
-                                 'return_sequences': True,
-                                 'stateful': True}
-                server_path = RNNVarReparametrized(**server_params)(
-                    server_path)
-
-                client_params = dict(layer_params)
-                client_params['kernel_divergence_fn'] = client_divergence_fn
-                client_params['recurrent_kernel_divergence_fn'] = \
-                    client_reccurrent_divergence_fn
-                client_cell = LSTMCellReparametrization(**client_params)
-                client_params = {'cell': client_cell,
-                                 'return_sequences': True,
-                                 'stateful': True}
-                client_path = RNNReparametrized(**client_params)(client_path)
-
-                client_path = tf.keras.layers.Activation(
-                    activation=layer_params['activation'])(
-                    tf.keras.layers.Add()([Gate()(server_path), client_path]))
             else:
                 client_path = layer_class(**layer_params)(client_path)
                 server_path = layer_class(**layer_params)(server_path)
