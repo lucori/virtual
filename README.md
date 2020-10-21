@@ -18,25 +18,6 @@ Otherwise simply install packages in an environment of your choice:
 pip install -r requirements.txt
 ```
 
-### Run on Leonhard
-You can submit several jobs on the Leonhard cluster simultanously. A job for all possible combinations of the `hp` parameters of the config file will be submitted. Please make sure that parameters defined as `hp` are removed from other parts of the config file.
-
-For Leonhard it is necessary that you download the data beforehand in a specific folder (i.e. `$DATADIR/tff_virtual/data/keras`) and pass this folder as `data_dir`.
-Below is an example where you should adapt both `result_dir` and `data_dir`:
-
-```
-module load gcc/6.3.0 python_gpu/3.7.4 hdf5/1.10.1
-
-python main.py configurations/femnist_fedprox.json --result_dir $DATADIR/tff_virtual --data_dir $DATADIR/tff_virtual/data/keras --submit_leonhard
-```
-
-In addition, few of Leonhard's job submission parameters such as requested memory or requested time can be passed as parameters. For more detail please see `main.py` or use help `python main.py -h`.
-
-Below is an example of submiting all jobs where 24h and 8500MB memory is requested.
-```
-python main.py configurations/femnist_fedprox.json --result_dir $DATADIR/tff_virtual --data_dir $DATADIR/tff_virtual/data/keras --submit_leonhard -m 8500 -t 24
-```
-
 ## General usage
 
 We first import useful packages
@@ -44,7 +25,7 @@ We first import useful packages
 
 ```python
 import tensorflow as tf
-from dense_reparametrization_shared import DenseReparametrizationShared
+from source.natural_raparametrization_layer import DenseReparametrizationNaturalShared
 from tensorflow_probability.python.distributions import kullback_leibler as kl_lib
 from virtual_process import VirtualFedProcess
 import tensorflow_federated as tff
@@ -85,7 +66,7 @@ We can now define a function that return a compiled modell.
 
 ```python
 
-layer = DenseReparametrizationShared
+layer = DenseReparametrizationNaturalShared
 
 def create_model(model_class, train_size):
     return model_class([layer(100, input_shape=(784,), activation='relu',
@@ -113,8 +94,8 @@ def model_fn(model_class, train_size):
 
 ```
 
-Notice here that use used a specialized layer, called DenseReparametrizationShared, that is a subclass of DenseReparametrization given in the tfp package.
-This layee has been specifically written for the implementation of Virtual, as it allow to update the kernel prior and reparametrize the posterior accordingly. 
+Notice here that use used a specialized layer, called DenseReparametrizationNaturalShared, that is a subclass of DenseReparametrization given in the tfp package.
+This layer has been specifically written for the implementation of Virtual, as it allow to update the kernel prior and reparametrize the posterior accordingly. 
 Now we can define the paremeters of the training, and use the VirtualProcess as a tf model.
 
 ```python
