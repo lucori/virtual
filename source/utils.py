@@ -28,10 +28,11 @@ def gpu_session(num_gpus=None, gpus=None):
     logger.info(f'Cuda devices: {gpus}') if gpus else \
         logger.info('No Cuda devices')
 
-    if gpus or num_gpus > 0:
+    tf_gpus = tf.config.experimental.list_physical_devices('GPU')
+    if (gpus or num_gpus > 0) and len(tf_gpus) > 0:
         logger.info(f"{gpus}, "
-                     f"{tf.config.experimental.list_physical_devices('GPU')}")
-        gpus = [tf.config.experimental.list_physical_devices('GPU')[int(gpu)] for gpu in gpus]
+                    f"{tf.config.experimental.list_physical_devices('GPU')}")
+        gpus = [tf_gpus[int(gpu)] for gpu in gpus]
         tf.config.experimental.set_visible_devices(gpus, 'GPU')
         tf.config.set_soft_device_placement(True)
         [tf.config.experimental.set_memory_growth(gpu, enable=True) for gpu in gpus]
