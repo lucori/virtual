@@ -13,7 +13,7 @@ logger = logging.getLogger(ROOT_LOGGER_STR + '.' + __name__)
 class VirtualFedProcess(FedProcess):
 
     def __init__(self, model_fn, num_clients, damping_factor=1,
-                 fed_avg_init=True):
+                 fed_avg_init=False):
         super(VirtualFedProcess, self).__init__(model_fn, num_clients)
         self.damping_factor = damping_factor
         self.fed_avg_init = fed_avg_init
