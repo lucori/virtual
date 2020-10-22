@@ -1,0 +1,51 @@
+{
+    "session":{
+        "num_gpus": 1,
+        "check_numerics": false
+    },
+    "data_set_conf":{
+        "name": "femnist",
+        "num_clients": 100
+    },
+    "training_conf": {"method": "virtual",
+                     "tot_epochs_per_client": 500,
+                     "tensorboard_updates": 1,
+                     "verbose": 0
+    },
+   "model_conf": {
+              "layers": [{
+                "input_shape": [784],
+                "name": "DenseLocalReparametrizationNaturalShared",
+                "units": 100,
+                "activation": "relu",
+                "bias_posterior_fn": null
+              },
+                {
+                "name": "DenseLocalReparametrizationNaturalShared",
+                "units": 100,
+                "activation": "relu",
+                "bias_posterior_fn": null
+              },
+                {
+                "name": "DenseLocalReparametrizationNaturalShared",
+                "units": 10,
+                "activation": "softmax",
+                "bias_posterior_fn": null
+              }],
+              "prior_scale": 1.0
+   },
+   "hp": {"epochs_per_round": [20],
+          "kl_weight": [0.000001],
+          "batch_size": [20],
+          "hierarchical": [false],
+          "clients_per_round": [10],
+          "learning_rate": [0.01],
+          "natural_lr": [2e6, 5e6, 1e7, 2e7, 5e7],
+          "server_learning_rate": [0.2],
+          "optimizer": ["sgd"],
+          "scale_init": [[-4.85, 0.45]],
+          "loc_init": [[0.0, 0.5]],
+          "fed_avg_init": [0, 1],
+          "delta_percentile": [0, 50, 75, 90, 95]
+   }
+}
