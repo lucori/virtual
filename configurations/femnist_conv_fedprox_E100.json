@@ -55,10 +55,9 @@
    },
    "hp": {"epochs_per_round": [100],
          "clients_per_round": [10],
-         "learning_rate": [0.001],
+         "learning_rate": [5e-4, 1e-3, 2e-3, 5e-3, 1e-2],
          "batch_size": [20],
-         "l2_reg": [0.00001],
-          "server_learning_rate": [1],
-          "damping_factor": [1]
+         "l2_reg": [0.0, 1e-5, 1e-4, 1e-3, 1e-2],
+         "server_learning_rate": [0.2, 0.4, 0.6, 0.8, 1]
    }
 }
