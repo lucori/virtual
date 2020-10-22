@@ -133,7 +133,7 @@ class FedProcess:
                 if MTL:
                     if self.fed_avg_init == 2 or (
                             self.fed_avg_init
-                            and not self.clients[indx].s_i_to_update):
+                            and round_i > 0):
                         print('initialize posterior with server')
                         self.clients[indx].initialize_kernel_posterior()
 
@@ -287,15 +287,15 @@ class FedProcess:
 
             # Do this at every round to make sure to keep the data even if
             # the training is interrupted
-            np.save(logdir.parent / 'server_accs.npy', server_test_accs)
-            np.save(logdir.parent / 'training_accs.npy', training_accs)
-            np.save(logdir.parent / 'selected_client_accs.npy', selected_client_test_accs)
-            np.save(logdir.parent / 'server_losses.npy', server_test_losses)
-            np.save(logdir.parent / 'training_losses.npy', training_losses)
-            np.save(logdir.parent / 'selected_client_losses.npy', selected_client_test_losses)
-            np.save(logdir.parent / 'all_client_accs.npy', all_client_test_accs)
-            np.save(logdir.parent / 'all_client_losses.npy', all_client_test_losses)
+            np.save(Path(logdir).parent / 'server_accs.npy', server_test_accs)
+            np.save(Path(logdir).parent / 'training_accs.npy', training_accs)
+            np.save(Path(logdir).parent / 'selected_client_accs.npy', selected_client_test_accs)
+            np.save(Path(logdir).parent / 'server_losses.npy', server_test_losses)
+            np.save(Path(logdir).parent / 'training_losses.npy', training_losses)
+            np.save(Path(logdir).parent / 'selected_client_losses.npy', selected_client_test_losses)
+            np.save(Path(logdir).parent / 'all_client_accs.npy', all_client_test_accs)
+            np.save(Path(logdir).parent / 'all_client_losses.npy', all_client_test_losses)
 
         for i, client in enumerate(self.clients):
-            client.save_weights(str(logdir / f'weights_{i}.h5'))
+            client.save_weights(str(Path(logdir) / f'weights_{i}.h5'))
 
