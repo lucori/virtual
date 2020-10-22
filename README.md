@@ -33,4 +33,6 @@ Then track the experiment using tensorboard as
 tensorboard --logdir logs/femnist_virtual_*
 ```
 
+Hyperparameters and relative metrics are tracked using the HPARAM API of tensorboard (see https://www.tensorflow.org/tensorboard/hyperparameter_tuning_with_hparams).
+
 Note that if you can not use any GPU, you have to specify "session": { "num_gpus": 0} in the config file.
