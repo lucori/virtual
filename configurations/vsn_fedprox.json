@@ -7,9 +7,8 @@
         "num_clients": -1
     },
     "training_conf": {"method": "fedprox",
-                     "tot_epochs_per_client": 1000,
-                     "clients_per_round": 5,
-                     "optimizer": "adam",
+                     "tot_epochs_per_client": 200,
+                     "optimizer": "sgd",
                      "tensorboard_updates": 1
                      },
    "model_conf": {
@@ -20,23 +19,28 @@
          ],
          "name": "DenseCentered",
          "units": 100,
-         "activation": "relu"
+         "activation": "relu",
+         "use_bias": false
        },
        {
          "name": "DenseCentered",
          "units": 100,
-         "activation": "relu"
+         "activation": "relu",
+         "use_bias": false
        },
        {
          "name": "DenseCentered",
          "units": 2,
-         "activation": "softmax"
+         "activation": "softmax",
+         "use_bias": false
        }
      ]
    },
-   "hp": {"epochs_per_round": [1, 5],
-         "learning_rate": [0.0005, 0.001, 0.002, 0.005],
-         "batch_size": [10, 20],
-         "l2_reg": [0.0, 0.0001, 0.01, 0.1, 1]
+   "hp": {"epochs_per_round": [20, 100],
+         "learning_rate": [1e-3, 2e-3, 5e-3, 1e-2, 2e-2],
+         "batch_size": [20],
+         "l2_reg": [0, 1e-5, 1e-4, 1e-3, 1e-2],
+         "clients_per_round": [10],
+         "server_learning_rate": [0.2, 0.4, 0.6, 0.8, 1.0]
    }
 }

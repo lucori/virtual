@@ -7,35 +7,42 @@
         "num_clients": -1
     },
     "training_conf": {"method": "virtual",
-                     "tot_epochs_per_client": 1000,
-                     "clients_per_round": 5,
-                     "optimizer": "adam",
+                     "tot_epochs_per_client": 200,
                      "fed_avg_init": false,
-                     "tensorboard_updates": 1,
-                     "damping_factor": 1.0,
-                     "kl_weight": 0.0001
+                     "tensorboard_updates": 1
     },
    "model_conf": {"layers": [{
                 "input_shape": [100],
-                "name": "DenseReparametrizationShared",
+                "name": "DenseReparametrizationNaturalShared",
                 "units": 100,
-                "activation": "relu"
+                "activation": "relu",
+                "bias_posterior_fn": null
               },
                 {
-                "name": "DenseReparametrizationShared",
+                "name": "DenseReparametrizationNaturalShared",
                 "units": 100,
-                "activation": "relu"
+                "activation": "relu",
+                "bias_posterior_fn": null
               },
                 {
-                "name": "DenseReparametrizationShared",
+                "name": "DenseReparametrizationNaturalShared",
                 "units": 2,
-                "activation": "softmax"
+                "activation": "softmax",
+                "bias_posterior_fn": null
               }],
               "hierarchical": false,
               "prior_scale": 1.0
    },
-   "hp": {"epochs_per_round": [1, 5],
-         "learning_rate": [0.0005, 0.001, 0.002, 0.005],
-         "batch_size": [10, 20]
-   }
+   "hp": {"epochs_per_round": [20],
+          "natural_lr": [1e8, 2e8, 5e8, 1e9, 2e9],
+          "kl_weight": [0, 1e-5, 1e-4, 1e-3, 1e-2],
+          "batch_size": [20],
+          "hierarchical": [false],
+          "clients_per_round": [10],
+          "learning_rate": [0.001],
+          "optimizer": ["sgd"],
+          "scale_init": [[-4.8, 0.45]],
+          "loc_init": [[0.0, 0.3]],
+          "server_learning_rate": [0.2, 0.4, 0.6, 0.8, 1.0]
+     }
 }

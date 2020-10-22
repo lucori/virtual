@@ -9,7 +9,7 @@
         "shape": [1, 28, 28]
     },
     "training_conf": {"method": "virtual",
-                     "tot_epochs_per_client": 10000,
+                     "tot_epochs_per_client": 500,
                      "batch_size": 20,
                      "optimizer": "sgd",
                      "fed_avg_init": false,

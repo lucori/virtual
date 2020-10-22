@@ -8,7 +8,7 @@
         "num_clients": 100
     },
     "training_conf": {"method": "virtual",
-                     "tot_epochs_per_client": 2500,
+                     "tot_epochs_per_client": 500,
                      "fed_avg_init": false,
                      "tensorboard_updates": 1
     },
@@ -34,17 +34,16 @@
               }],
               "prior_scale": 1.0
    },
-   "hp": {"epochs_per_round": [1000],
-          "natural_lr": [800000000.0],
-          "kl_weight": [0.0000001],
+   "hp": {"epochs_per_round": [20, 100],
+          "natural_lr": [1e8, 2e8, 5e8, 1e9, 2e9],
+          "kl_weight": [0, 1e-5, 1e-4, 1e-3, 1e-2],
           "batch_size": [20],
           "hierarchical": [false],
-          "clients_per_round": [1],
+          "clients_per_round": [10],
           "learning_rate": [0.001],
           "optimizer": ["sgd"],
           "scale_init": [[-4.85, 0.45]],
-           "loc_init": [[0,0.5]],
-          "damping_factor": [1],
-           "server_learning_rate": [1]
+          "loc_init": [[0,0.5]],
+          "server_learning_rate": [0.2, 0.4, 0.6, 0.8, 1.0]
    }
 }

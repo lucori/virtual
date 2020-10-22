@@ -13,7 +13,7 @@
                      "optimizer": "sgd",
                      "fed_avg_init": false,
                      "tensorboard_updates": 1,
-                     "verbose": 2
+                     "verbose": 0
     },
    "model_conf": {"layers": [{"name": "EmbeddingCentered",
                              "input_dim": 87,
@@ -35,11 +35,11 @@
                             ],
                 "architecture": "rnn"
    },
-   "hp": {"epochs_per_round": [300],
-         "learning_rate": [0.5],
-         "server_learning_rate": [1.0],
+   "hp": {"epochs_per_round": [20],
+         "learning_rate": [1e-1, 2e-1, 5e-1, 1, 2],
+         "server_learning_rate": [0.2, 0.4, 0.6, 0.8, 1.0],
          "batch_size": [10],
-         "l2_reg": [0.0],
-         "clients_per_round": [1]
+         "l2_reg": [0.0, 1e-5, 1e-4, 1e-3, 1e-2],
+         "clients_per_round": [10]
    }
 }

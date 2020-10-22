@@ -8,7 +8,7 @@
         "num_clients": 100
     },
     "training_conf": {"method": "fedprox",
-                     "tot_epochs_per_client": 10000,
+                     "tot_epochs_per_client": 500,
                      "optimizer": "sgd",
                      "tensorboard_updates": 1
                      },
@@ -32,12 +32,11 @@
                 "use_bias": false
               }]
               },
-   "hp": {"epochs_per_round": [10],
-         "learning_rate": [0.005],
+   "hp": {"epochs_per_round": [20, 100],
+         "learning_rate": [1e-3, 2e-3, 5e-3, 1e-2, 2e-2],
          "batch_size": [20],
-         "l2_reg": [0.0001],
-         "clients_per_round": [1, 5, 15, 30],
-         "damping_factor": [1],
-         "server_learning_rate": [1]
+         "l2_reg": [0, 1e-5, 1e-4, 1e-3, 1e-2],
+         "clients_per_round": [10],
+         "server_learning_rate": [0.2, 0.4, 0.6, 0.8, 1.0]
    }
 }

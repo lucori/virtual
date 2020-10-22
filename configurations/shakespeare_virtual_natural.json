@@ -10,11 +10,10 @@
     },
     "training_conf": {"method": "virtual",
                      "tot_epochs_per_client": 300,
-                     "clients_per_round": 1,
                      "optimizer": "sgd",
                      "fed_avg_init": false,
                      "tensorboard_updates": 1,
-                     "verbose": 3
+                     "verbose": 0
 
     },
    "model_conf": {"layers": [{"name": "EmbeddingCentered",
@@ -38,15 +37,16 @@
                 "prior_scale": 1.0,
                 "architecture": "rnn"
    },
-   "hp": {"epochs_per_round": [300],
-          "learning_rate": [10],
-          "natural_lr": [200000000.0],
-          "server_learning_rate": [1.0],
-          "batch_size": [10],
-          "kl_weight": [0.0],
-          "l2_reg": [0.0],
+   "hp": {"epochs_per_round": [20],
+          "natural_lr": [1e9, 2e9, 5e9, 1e10, 2e10],
+          "kl_weight": [0, 1e-5, 1e-4, 1e-3, 1e-2],
+          "batch_size": [20],
           "hierarchical": [false],
-          "damping_factor": [1.0],
-          "scale_init": [[-5, 0.1]]
-   }
+          "clients_per_round": [10],
+          "learning_rate": [10.0],
+          "optimizer": ["sgd"],
+          "scale_init": [[-4.85, 0.45]],
+          "loc_init": [[0,0.5]],
+          "server_learning_rate": [0.2, 0.4, 0.6, 0.8, 1.0]
+     }
 }

@@ -4,12 +4,12 @@
         "verbose": 0
     },
     "data_set_conf":{
-        "name": "pmnist",
+        "name": "femnist",
         "num_clients": 100,
         "shape": [1, 28, 28]
     },
     "training_conf": {"method": "fedprox",
-                     "tot_epochs_per_client": 10000,
+                     "tot_epochs_per_client": 500,
                      "optimizer": "sgd",
                      "tensorboard_updates": 1
     },
@@ -53,12 +53,11 @@
                             }
                             ]
    },
-   "hp": {"epochs_per_round": [100],
-         "learning_rate": [0.001],
+   "hp": {"epochs_per_round": [20, 100],
+         "clients_per_round": [10],
+         "learning_rate": [5e-4, 1e-3, 2e-3, 5e-3, 1e-2],
          "batch_size": [20],
-         "l2_reg": [0.0001],
-         "damping_factor": [1],
-         "server_learning_rate": [1],
-         "clients_per_round": [10]
+         "l2_reg": [0.0, 1e-5, 1e-4, 1e-3, 1e-2],
+         "server_learning_rate": [0.2, 0.4, 0.6, 0.8, 1]
    }
 }
