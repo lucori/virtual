@@ -63,14 +63,13 @@
    },
    "hp": {
           "learning_rate": [0.0001],
-          "natural_lr": [1000000000.0],
-          "kl_weight": [0.0],
+          "natural_lr": [1e8, 2e8, 5e8, 1e9, 2e9],
+          "kl_weight": [0.0, 1e-5, 1e-4, 1e-3, 1e-2],
           "hierarchical": [false],
           "scale_init": [[-4.45, 0.85]],
           "loc_init": [[0, 0.65]],
-          "server_learning_rate": [0.2],
-          "damping_factor": [0.8],
+          "server_learning_rate": [0.2, 0.4, 0.6, 0.8, 1.0],
           "clients_per_round": [10],
-          "epochs_per_round": [100]
+          "epochs_per_round": [20, 100]
    }
 }
